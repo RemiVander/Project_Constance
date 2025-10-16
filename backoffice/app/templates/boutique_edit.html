@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Modifier la boutique {{ boutique.nom }}{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Modifier la boutique</h1>
+
+<form method="post" class="space-y-4 max-w-xl">
+  <div>
+    <label class="block text-sm font-medium mb-1">Nom</label>
+    <input name="nom" type="text" required
+           class="border rounded px-3 py-2 w-full"
+           value="{{ boutique.nom }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Email</label>
+    <input name="email" type="email" required
+           class="border rounded px-3 py-2 w-full"
+           value="{{ boutique.email }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Gérant</label>
+    <input name="gerant" type="text"
+           class="border rounded px-3 py-2 w-full"
+           value="{{ boutique.gerant or '' }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Téléphone</label>
+    <input name="telephone" type="text"
+           class="border rounded px-3 py-2 w-full"
+           value="{{ boutique.telephone or '' }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Adresse</label>
+    <input name="adresse" type="text"
+           class="border rounded px-3 py-2 w-full"
+           value="{{ boutique.adresse or '' }}">
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium mb-1">Numéro de TVA</label>
+    <input name="numero_tva" type="text"
+           class="border rounded px-3 py-2 w-full"
+           placeholder="FRxxxxxxxxxxx"
+           value="{{ boutique.numero_tva or '' }}">
+    <p class="text-xs text-gray-500 mt-1">
+      Laissez vide si la boutique n&apos;est pas assujettie à la TVA.
+    </p>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <input id="actif" name="actif" type="checkbox"
+           class="h-4 w-4"
+           {% if boutique.actif %}checked{% endif %}>
+    <label for="actif" class="text-sm">Boutique active</label>
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit"
+            class="bg-gray-900 text-white text-sm font-semibold px-4 py-2 rounded">
+      Enregistrer
+    </button>
+    <a href="/admin/boutiques/{{ boutique.id }}"
+       class="text-sm text-gray-600 underline">Annuler</a>
+  </div>
+</form>
+{% endblock %}

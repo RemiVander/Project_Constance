@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Back-office B2B{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+
+</head>
+<body class="bg-gray-100 text-gray-800">
+<div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <aside class="w-72 bg-white shadow-lg">
+        <div class="p-4 border-b">
+            <h1 class="text-xl font-bold">Back-end Constance Cellier</h1>
+            {% if admin %}
+            <p class="text-sm text-gray-500">Connecté : {{ admin.nom }}</p>
+            {% endif %}
+        </div>
+        <nav class="p-4 space-y-2 text-sm">
+            <a href="/admin/dashboard" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if page=='dashboard' else 'hover:bg-gray-100' }}">
+                Tableau de bord
+            </a>
+            <a href="/admin/boutiques" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if page=='boutiques' else 'hover:bg-gray-100' }}">
+                Suivi des boutiques
+            </a>
+            <div class="mt-4">
+                <p class="text-xs uppercase text-gray-400 mb-1">Produits</p>
+                <a href="/admin/produits/robes" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='robes' else 'hover:bg-gray-100' }}">
+                    Modèles de robes
+                </a>
+                <a href="/admin/tarifs/transformations" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='tarifs_transformations' else 'hover:bg-gray-100' }}">
+                    Tarifs transformations
+                </a>
+                <a href="/admin/tarifs/tissus" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='tarifs_tissus' else 'hover:bg-gray-100' }}">
+                    Tarifs tissus
+                </a>
+                <a href="/admin/finitions_supplementaires" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='finitions_supp' else 'hover:bg-gray-100' }}">
+                    Finitions supplémentaires
+                </a>
+                <a href="/admin/produits/mesures"
+                    class="block px-3 py-2 rounded text-sm {% if sous_page=='mesures' %}bg-gray-200 text-gray-900 font-semibold{% else %}hover:bg-gray-100{% endif %}">
+                        Types de mesures
+                </a>
+                <a href="/admin/produits/accessoires" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='accessoires' else 'hover:bg-gray-100' }}">
+                    Accessoires
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 p-8">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

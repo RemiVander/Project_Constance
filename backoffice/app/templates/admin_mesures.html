@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Types de mesures{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Types de mesures</h1>
+
+<div class="bg-white rounded shadow p-4 mb-6">
+    <h2 class="font-semibold mb-2">Ajouter un type de mesure</h2>
+    <form action="/admin/produits/mesures/create" method="post" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium mb-1">Nom affiché</label>
+            <input type="text" name="label" required class="w-full border rounded px-2 py-1" placeholder="ex: Tour de poitrine">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Code interne (optionnel)</label>
+            <input type="text" name="code" class="w-full border rounded px-2 py-1" placeholder="tour_poitrine">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Ordre</label>
+            <input type="number" name="ordre" value="0" class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="md:col-span-4 flex items-center gap-4">
+            <label class="inline-flex items-center text-xs">
+                <input type="checkbox" name="obligatoire" checked class="mr-2">
+                Obligatoire pour accepter un devis
+            </label>
+            <button type="submit" class="ml-auto px-3 py-1 rounded bg-gray-900 text-white text-xs font-semibold">
+                Ajouter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white rounded shadow p-4">
+    <h2 class="font-semibold mb-3 text-sm">Mesures existantes</h2>
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b text-left text-xs text-gray-500">
+                <th class="px-4 py-2">Ordre</th>
+                <th class="px-4 py-2">Code</th>
+                <th class="px-4 py-2">Nom affiché</th>
+                <th class="px-4 py-2">Obligatoire</th>
+                <th class="px-4 py-2 text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for m in mesures %}
+            <tr class="border-b">
+                <td class="px-4 py-2 align-top">
+                    <form action="/admin/produits/mesures/{{ m.id }}/update" method="post" class="flex items-center gap-2">
+                        <input type="number" name="ordre" value="{{ m.ordre }}" class="w-20 border rounded px-2 py-1 text-sm">
+                </td>
+                <td class="px-4 py-2 align-top text-xs text-gray-500">
+                    {{ m.code }}
+                </td>
+                <td class="px-4 py-2 align-top">
+                        <input type="text" name="label" value="{{ m.label }}" class="w-full border rounded px-2 py-1 text-sm">
+                </td>
+                <td class="px-4 py-2 align-top">
+                    <label class="inline-flex items-center text-xs">
+                        <input type="checkbox" name="obligatoire" {% if m.obligatoire %}checked{% endif %} class="mr-2">
+                        Obligatoire
+                    </label>
+                </td>
+                <td class="px-4 py-2 align-top text-right">
+                        <button type="submit" class="text-blue-600 mr-3 text-xs">Sauver</button>
+                    </form>
+                    <form action="/admin/produits/mesures/{{ m.id }}/delete" method="post" class="inline">
+                        <button type="submit" class="text-red-600 text-xs" onclick="return confirm('Supprimer ce type de mesure ?');">
+                            Supprimer
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

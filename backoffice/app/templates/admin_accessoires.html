@@ -1,0 +1,65 @@
+
+{% extends "base.html" %}
+{% block title %}Accessoires{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Accessoires</h1>
+
+<div class="bg-white rounded shadow p-4 mb-6">
+    <h2 class="font-semibold mb-2">Ajouter un accessoire</h2>
+    <form action="/admin/produits/accessoires/create" method="post" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+            <label class="block text-sm font-medium mb-1">Nom</label>
+            <input type="text" name="nom" required class="w-full border rounded px-2 py-1">
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Description</label>
+            <input type="text" name="description" class="w-full border rounded px-2 py-1">
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Prix (€)</label>
+            <input type="number" name="prix" step="0.01" min="0" class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="md:col-span-3 flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                Ajouter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white rounded shadow overflow-hidden">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50">
+        <tr>
+            <th class="px-4 py-2 text-left">Nom</th>
+            <th class="px-4 py-2 text-left">Description</th>
+            <th class="px-4 py-2 text-left">Prix</th>
+            <th class="px-4 py-2"></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for a in accessoires %}
+            <tr class="border-t">
+                <form action="/admin/produits/accessoires/{{ a.id }}/update" method="post">
+                    <td class="px-4 py-2">
+                        <input type="text" name="nom" value="{{ a.nom }}" class="w-full border rounded px-2 py-1">
+                    </td>
+                    <td class="px-4 py-2">
+                        <input type="text" name="description" value="{{ a.description or '' }}" class="w-full border rounded px-2 py-1">
+                    </td>
+                    <td class="px-4 py-2">
+                        <input type="number" name="prix" step="0.01" value="{{ a.prix }}" class="w-full border rounded px-2 py-1">
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                        <button type="submit" class="text-blue-600 mr-2">Sauver</button>
+                </form>
+                        <form action="/admin/produits/accessoires/{{ a.id }}/delete" method="post" class="inline">
+                            <button type="submit" class="text-red-600" onclick="return confirm('Supprimer cet accessoire ?');">Supprimer</button>
+                        </form>
+                    </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+# =========================
+# ENVIRONNEMENT VIRTUEL
+# =========================
+venv/
+.env/
+.env.local
+.env
+*.env
+
+
+# =========================
+# SCRIPTS LOCAUX (non versionnés)
+# =========================
+scripts/
+
+# =========================
+# FICHIERS PYTHON TEMPORAIRES
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# LOGS / CACHES
+# =========================
+*.log
+*.pot
+*.py[cod]
+*.sqlite3
+db.sqlite3
+*.db
+
+# =========================
+# BUILD / DISTRIBUTION
+# =========================
+build/
+dist/
+*.egg-info/
+
+# =========================
+# CONFIG ÉDITEURS
+# =========================
+.vscode/
+
+# =========================
+# FICHIERS SYSTÈME
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# FICHIERS D’EXPORTATION
+# =========================
+*.csv
+*.xlsx
+*.ods
+
+# =========================
+# DOSSIERS DE TEST / DONNÉES
+# =========================
+tests/__pycache__/
+data/
+tmp/

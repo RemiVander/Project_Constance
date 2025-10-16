@@ -1,0 +1,216 @@
+from datetime import datetime
+from enum import Enum
+from sqlalchemy import (
+    Column, Integer, String, DateTime, Float,
+    Enum as SAEnum, ForeignKey, Text, Boolean, func
+)
+from sqlalchemy.orm import relationship
+
+from .database import Base
+
+
+class UserType(str, Enum):
+    ADMIN = "admin"
+
+
+class User(Base):
+    """Compte admin (back-office)."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    mot_de_passe = Column(String, nullable=False)
+    type = Column(SAEnum(UserType), default=UserType.ADMIN, nullable=False)
+    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class BoutiqueStatut(str, Enum):
+    ACTIF = "ACTIF"
+    INACTIF = "INACTIF"
+    SUSPENDU = "SUSPENDU"
+
+
+class Boutique(Base):
+    """Compte boutique (accès B2B)."""
+    __tablename__ = "boutiques"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    gerant = Column(String, nullable=True)
+    telephone = Column(String, nullable=True)
+    adresse = Column(Text, nullable=True)
+
+    mot_de_passe_hash = Column(String, nullable=True)
+    doit_changer_mdp = Column(Boolean, default=True, nullable=False)
+
+    statut = Column(SAEnum(BoutiqueStatut), default=BoutiqueStatut.ACTIF, nullable=False)
+    numero_tva = Column(String, nullable=True)
+
+    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    devis = relationship("Devis", back_populates="boutique")
+
+
+class RobeModele(Base):
+    """Modèle de robe (Alizé, Bora, Eurus...)."""
+    __tablename__ = "robe_modeles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    actif = Column(Boolean, default=True, nullable=False)
+
+    tarifs_transformations = relationship("TransformationTarif", back_populates="robe_modele")
+    tarifs_tissus = relationship("TissuTarif", back_populates="robe_modele")
+
+
+class TransformationTarif(Base):
+    """
+    Tarifs de transformations : décolleté devant/dos, découpes, manches, ceinture, bas, etc.
+    """
+    __tablename__ = "tarifs_transformations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    categorie = Column(String, nullable=False)
+    finition = Column(String, nullable=True)
+    robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
+
+    epaisseur_ou_option = Column(String, nullable=True)
+
+    prix = Column(Float, default=0.0, nullable=False)
+
+    est_decollete = Column(Boolean, default=False, nullable=False)
+    ceinture_possible = Column(Boolean, default=False, nullable=False)
+    nb_epaisseurs = Column(Integer, nullable=True)
+
+    robe_modele = relationship("RobeModele", back_populates="tarifs_transformations")
+
+
+class TissuTarif(Base):
+    """Tarifs des matières / tissus par zone (devant, dos, manches, bas, ceinture...)."""
+    __tablename__ = "tarifs_tissus"
+
+    id = Column(Integer, primary_key=True, index=True)
+    categorie = Column(String, nullable=False)
+    robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
+    detail = Column(Text, nullable=False)
+    forme = Column(String, nullable=True)
+    prix = Column(Float, default=0.0, nullable=False)
+
+    nb_epaisseurs = Column(Integer, nullable=True) 
+    mono_epaisseur = Column(Boolean, default=False, nullable=False)
+    matiere = Column(String, nullable=True) 
+
+    robe_modele = relationship("RobeModele", back_populates="tarifs_tissus")
+
+
+class FinitionSupplementaire(Base):
+    """Finitions supplémentaires globales (fente, quille de dentelle...)."""
+    __tablename__ = "finitions_supplementaires"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, nullable=False)
+    prix = Column(Float, default=0.0, nullable=False)
+    est_fente = Column(Boolean, default=False, nullable=False)
+
+
+class Accessoire(Base):
+    """Accessoires (housse, etc.)."""
+    __tablename__ = "accessoires"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    prix = Column(Float, default=0.0, nullable=False)
+
+
+class StatutDevis(str, Enum):
+    EN_COURS = "EN_COURS"
+    ACCEPTE = "ACCEPTE"
+    REFUSE = "REFUSE"
+
+
+class Devis(Base):
+    """Devis créé par les boutiques pour une cliente."""
+    __tablename__ = "devis"
+
+    id = Column(Integer, primary_key=True, index=True)
+    boutique_id = Column(Integer, ForeignKey("boutiques.id"), nullable=False)
+    numero_boutique = Column(Integer, nullable=False)
+    statut = Column(SAEnum(StatutDevis), default=StatutDevis.EN_COURS, nullable=False)
+    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+    prix_total = Column(Float, default=0.0, nullable=False)
+
+    boutique = relationship("Boutique", back_populates="devis")
+    lignes = relationship("LigneDevis", back_populates="devis", cascade="all, delete-orphan")
+    mesures = relationship("DevisMesure", back_populates="devis", cascade="all, delete-orphan")
+    bon_commande = relationship("BonCommande", back_populates="devis", uselist=False)
+
+
+class StatutBonCommande(str, Enum):
+    EN_ATTENTE_VALIDATION = "EN_ATTENTE_VALIDATION"
+    A_MODIFIER = "A_MODIFIER"
+    VALIDE = "VALIDE"
+    REFUSE = "REFUSE"
+
+
+class BonCommande(Base):
+    __tablename__ = "bons_commandes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devis_id = Column(Integer, ForeignKey("devis.id"), unique=True, nullable=False)
+
+    date_creation = Column(DateTime, server_default=func.now(), nullable=False)
+    montant_boutique_ht = Column(Float, default=0.0, nullable=False)
+    montant_boutique_ttc = Column(Float, default=0.0, nullable=False)
+    has_tva = Column(Boolean, default=False, nullable=False)
+
+    statut = Column(SAEnum(StatutBonCommande), default=StatutBonCommande.EN_ATTENTE_VALIDATION, nullable=False)
+    commentaire_admin = Column(Text, nullable=True)
+
+    devis = relationship("Devis", back_populates="bon_commande")
+
+
+class LigneDevis(Base):
+    """Ligne d'un devis (description textuelle + prix interne)."""
+    __tablename__ = "lignes_devis"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devis_id = Column(Integer, ForeignKey("devis.id"), nullable=False)
+    robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
+
+    description = Column(Text, nullable=True)
+    quantite = Column(Integer, default=1, nullable=False)
+    prix_unitaire = Column(Float, default=0.0, nullable=False)
+
+    devis = relationship("Devis", back_populates="lignes")
+    robe_modele = relationship("RobeModele")
+
+
+class MesureType(Base):
+    """Type de mesure (tour de poitrine, taille, bassin, etc.)."""
+    __tablename__ = "mesure_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False)
+    label = Column(String, nullable=False)
+    obligatoire = Column(Boolean, default=True, nullable=False)
+    ordre = Column(Integer, default=0, nullable=False)
+
+
+class DevisMesure(Base):
+    """
+    Valeur d'une mesure pour un devis donné.
+    """
+    __tablename__ = "devis_mesures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devis_id = Column(Integer, ForeignKey("devis.id", ondelete="CASCADE"), nullable=False)
+    mesure_type_id = Column(Integer, ForeignKey("mesure_types.id"), nullable=False)
+    valeur = Column(Float, nullable=True) 
+
+    devis = relationship("Devis", back_populates="mesures")
+    mesure_type = relationship("MesureType")

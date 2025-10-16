@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: ./backoffice
+      dockerfile: Dockerfile
+    container_name: constance-api
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:///./robes_demi_mesure.db
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+    ports:
+      - "8000:8000"
+
+  front:
+    build:
+      context: ./boutique-front
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    container_name: constance-front
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
