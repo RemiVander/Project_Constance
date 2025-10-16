@@ -12,4 +12,4 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True

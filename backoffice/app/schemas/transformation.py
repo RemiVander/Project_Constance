@@ -13,4 +13,4 @@ class TransformationCreate(TransformationBase):
 class Transformation(TransformationBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True

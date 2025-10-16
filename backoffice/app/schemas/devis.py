@@ -13,4 +13,4 @@ class Devis(DevisBase):
     id: int
     date_creation: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True

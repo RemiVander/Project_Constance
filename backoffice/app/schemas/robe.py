@@ -10,4 +10,4 @@ class RobeCreate(RobeBase):
 class Robe(RobeBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
