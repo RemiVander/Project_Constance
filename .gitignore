@@ -1,0 +1,39 @@
+# --- Environnement virtuel ---
+venv/
+.env/
+.env.local
+
+# --- Fichiers Python temporaires ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Logs / caches ---
+*.log
+*.pot
+*.py[cod]
+*.sqlite3
+db.sqlite3
+
+# --- Fichiers de build ou dist ---
+build/
+dist/
+*.egg-info/
+
+# --- Config VSCode ---
+.vscode/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Fichiers d’export ou data ---
+*.csv
+*.xlsx
+*.ods
+
+# --- Dossiers de test ou de data ---
+tests/__pycache__/
+data/
+tmp/
