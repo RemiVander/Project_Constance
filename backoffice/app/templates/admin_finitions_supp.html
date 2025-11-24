@@ -1,0 +1,57 @@
+
+{% extends "base.html" %}
+{% block title %}Finitions supplémentaires{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Finitions supplémentaires</h1>
+
+<div class="bg-white rounded shadow p-4 mb-6">
+    <h2 class="font-semibold mb-2">Ajouter une finition</h2>
+    <form action="/admin/finitions_supplementaires/create" method="post" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium mb-1">Nom</label>
+            <input type="text" name="nom" required class="w-full border rounded px-2 py-1" placeholder="Jupe avec fente milieu devant">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Prix (€)</label>
+            <input type="number" step="0.01" min="0" name="prix" class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="md:col-span-3 flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                Ajouter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white rounded shadow overflow-hidden">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50">
+        <tr>
+            <th class="px-4 py-2 text-left">Nom</th>
+            <th class="px-4 py-2 text-left">Prix</th>
+            <th class="px-4 py-2"></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for f in finitions %}
+            <tr class="border-t">
+                <form action="/admin/finitions_supplementaires/{{ f.id }}/update" method="post">
+                    <td class="px-4 py-2">
+                        <input type="text" name="nom" value="{{ f.nom }}" class="w-full border rounded px-2 py-1">
+                    </td>
+                    <td class="px-4 py-2">
+                        <input type="number" name="prix" step="0.01" value="{{ f.prix }}" class="w-full border rounded px-2 py-1">
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                        <button type="submit" class="text-blue-600 mr-2">Sauver</button>
+                </form>
+                        <form action="/admin/finitions_supplementaires/{{ f.id }}/delete" method="post" class="inline">
+                            <button type="submit" class="text-red-600" onclick="return confirm('Supprimer cette finition ?');">Supprimer</button>
+                        </form>
+                    </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

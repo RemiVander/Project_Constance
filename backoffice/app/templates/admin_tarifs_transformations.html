@@ -1,0 +1,125 @@
+
+{% extends "base.html" %}
+{% block title %}Tarifs transformations{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Tarifs transformations</h1>
+
+<div class="bg-white rounded shadow p-4 mb-6">
+    <h2 class="font-semibold mb-2">Ajouter un tarif de transformation</h2>
+    <form action="/admin/tarifs/transformations/create" method="post" class="grid grid-cols-1 md:grid-cols-6 gap-4 text-sm">
+        <div>
+            <label class="block text-xs font-medium mb-1">Catégorie</label>
+            <input type="text" name="categorie" required class="w-full border rounded px-2 py-1" placeholder="Décolleté devant">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Finition</label>
+            <input type="text" name="finition" class="w-full border rounded px-2 py-1" placeholder="Rond, Petit V...">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Modèle de robe</label>
+            <select name="robe_modele_id" class="w-full border rounded px-2 py-1">
+                <option value="0">(toutes)</option>
+                {% for m in modeles %}
+                    <option value="{{ m.id }}">{{ m.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Épaisseur / option</label>
+            <input type="text" name="epaisseur_ou_option" class="w-full border rounded px-2 py-1" placeholder="2 épaisseurs, Boléro...">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Prix (€)</label>
+            <input type="number" step="0.01" min="0" name="prix" class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="flex flex-col justify-between">
+            <div>
+                <label class="inline-flex items-center text-xs">
+                    <input type="checkbox" name="est_decollete" class="mr-1">
+                    Est décolleté
+                </label>
+            </div>
+            <div>
+                <label class="inline-flex items-center text-xs">
+                    <input type="checkbox" name="ceinture_possible" checked class="mr-1">
+                    Ceinture possible
+                </label>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">
+                Rappel : "Est décolleté" uniquement pour Décolleté devant/dos.<br>
+                "Ceinture possible" uniquement pour Découpe devant.
+            </p>
+        </div>
+        <div class="md:col-span-6 flex justify-end">
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                Ajouter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white rounded shadow overflow-auto">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50">
+        <tr>
+            <th class="px-2 py-2 text-left">Catégorie</th>
+            <th class="px-2 py-2 text-left">Finition</th>
+            <th class="px-2 py-2 text-left">Modèle</th>
+            <th class="px-2 py-2 text-left">Épaisseur / option</th>
+            <th class="px-2 py-2 text-left">Prix</th>
+            <th class="px-2 py-2 text-left">Décolleté ?</th>
+            <th class="px-2 py-2 text-left">Ceinture ok ?</th>
+            <th class="px-2 py-2"></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for t in tarifs %}
+            <tr class="border-t">
+                <form action="/admin/tarifs/transformations/{{ t.id }}/update" method="post">
+                    <td class="px-2 py-1">
+                        <input type="text" name="categorie" value="{{ t.categorie }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="text" name="finition" value="{{ t.finition or '' }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1">
+                        <select name="robe_modele_id" class="w-full border rounded px-1 py-0.5">
+                            <option value="0">(toutes)</option>
+                            {% for m in modeles %}
+                                <option value="{{ m.id }}" {% if t.robe_modele_id==m.id %}selected{% endif %}>{{ m.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="text" name="epaisseur_ou_option" value="{{ t.epaisseur_ou_option or '' }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="number" step="0.01" name="prix" value="{{ t.prix }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1 text-center">
+                        {% if t.categorie in ["Décolleté devant", "Décolleté dos"] %}
+                            <input type="checkbox" name="est_decollete" {% if t.est_decollete %}checked{% endif %}>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="px-2 py-1 text-center">
+                        {% if t.categorie == "Découpe devant" %}
+                            <input type="checkbox" name="ceinture_possible" {% if t.ceinture_possible %}checked{% endif %}>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="px-2 py-1 text-right whitespace-nowrap">
+                        <button type="submit" class="text-blue-600 mr-2">Sauver</button>
+                </form>
+                        <form action="/admin/tarifs/transformations/{{ t.id }}/delete" method="post" class="inline">
+                            <button type="submit" class="text-red-600" onclick="return confirm('Supprimer ce tarif ?');">Supprimer</button>
+                        </form>
+                    </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
