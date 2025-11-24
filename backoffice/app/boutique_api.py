@@ -11,6 +11,12 @@ from .database import SessionLocal
 from . import models
 from .auth import verify_password, get_password_hash
 
+from fastapi.responses import StreamingResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from io import BytesIO
+
+
 router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
 
 # IMPORTANT : à modifier
@@ -178,7 +184,7 @@ def login_boutique(
         value=token,
         httponly=True,
         secure=False,          
-        samesite="strict",
+        samesite="lax",
         max_age=TOKEN_MAX_AGE_SECONDS,
         path="/",
     )
@@ -437,3 +443,81 @@ def logout_boutique(response: Response):
         path="/",
     )
     return {"ok": True}
+
+@router.get("/devis/{devis_id}/pdf")
+def get_devis_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
+        )
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    # On charge les lignes pour afficher le détail
+    lignes = (
+        db.query(models.LigneDevis)
+        .filter(models.LigneDevis.devis_id == devis.id)
+        .all()
+    )
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    y = height - 50
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y, f"Devis {boutique.nom}-#{devis.numero_boutique}")
+    y -= 25
+
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, f"Boutique : {boutique.nom}")
+    y -= 15
+    c.drawString(50, y, f"Email : {boutique.email or ''}")
+    y -= 15
+    if devis.date_creation:
+        c.drawString(50, y, f"Date : {devis.date_creation.strftime('%Y-%m-%d')}")
+        y -= 15
+
+    c.drawString(50, y, f"Statut : {devis.statut.value}")
+    y -= 25
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Lignes du devis :")
+    y -= 20
+
+    c.setFont("Helvetica", 10)
+    for ligne in lignes:
+        if y < 80:
+            c.showPage()
+            y = height - 50
+            c.setFont("Helvetica", 10)
+
+        texte = f"- x{ligne.quantite} | {ligne.description or 'Ligne'} | {ligne.prix_unitaire:.2f} € HT"
+        c.drawString(60, y, texte)
+        y -= 15
+
+    y -= 10
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, f"Total HT : {devis.prix_total:.2f} €")
+    y -= 15
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    filename = f"devis_{boutique.nom}-{devis.numero_boutique}.pdf".replace(" ", "_")
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
