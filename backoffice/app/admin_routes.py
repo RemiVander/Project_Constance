@@ -169,6 +169,27 @@ def boutique_create(
     return RedirectResponse(url="/admin/boutiques", status_code=302)
 
 
+@router.post("/admin/boutiques/{boutique_id}/statut")
+def boutique_change_statut(
+    boutique_id: int,
+    request: Request,
+    statut: str = Form(...),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    try:
+        boutique.statut = models.BoutiqueStatut(statut)
+    except ValueError:
+        return RedirectResponse(url=f"/admin/boutiques/{boutique_id}", status_code=302)
+
+    db.commit()
+    return RedirectResponse(url=f"/admin/boutiques/{boutique_id}", status_code=302)
+
+
 @router.get("/admin/boutiques/{boutique_id}")
 def boutique_detail(
     boutique_id: int,

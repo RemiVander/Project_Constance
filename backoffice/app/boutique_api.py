@@ -133,8 +133,12 @@ def get_current_boutique(
         raise HTTPException(status_code=401, detail="Token invalide")
 
     boutique = db.query(models.Boutique).get(boutique_id)
-    if not boutique or boutique.statut != models.BoutiqueStatut.ACTIF:
-        raise HTTPException(status_code=401, detail="Boutique non trouvée ou inactive")
+    if not boutique:
+        raise HTTPException(status_code=401, detail="Boutique non trouvée")
+
+    if boutique.statut == models.BoutiqueStatut.SUSPENDU:
+        raise HTTPException(status_code=403, detail="Boutique suspendue")
+
     return boutique
 
 
@@ -164,8 +168,8 @@ def login_boutique(
     if not verify_password(payload.password, boutique.mot_de_passe_hash):
         raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
 
-    if boutique.statut != models.BoutiqueStatut.ACTIF:
-        raise HTTPException(status_code=403, detail="Boutique inactive")
+    if boutique.statut == models.BoutiqueStatut.SUSPENDU:
+        raise HTTPException(status_code=403, detail="Boutique suspendue")
 
     token = create_token_for_boutique(boutique)
 
@@ -359,6 +363,12 @@ def create_devis(
       - le nouveau numero_boutique (Paris-#N)
       - le prix_total
     """
+    if boutique.statut != models.BoutiqueStatut.ACTIF:
+        raise HTTPException(
+            status_code=403,
+            detail="Cette boutique est inactive : création de nouveaux devis désactivée."
+        )
+    
     if not payload.lignes:
         raise HTTPException(status_code=400, detail="Le devis doit contenir au moins une ligne")
 
