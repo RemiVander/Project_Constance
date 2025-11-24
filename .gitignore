@@ -1,15 +1,26 @@
-# --- Environnement virtuel ---
+# =========================
+# ENVIRONNEMENT VIRTUEL
+# =========================
 venv/
 .env/
 .env.local
 
-# --- Fichiers Python temporaires ---
+# =========================
+# SCRIPTS LOCAUX (non versionnés)
+# =========================
+scripts/
+
+# =========================
+# FICHIERS PYTHON TEMPORAIRES
+# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# --- Logs / caches ---
+# =========================
+# LOGS / CACHES
+# =========================
 *.log
 *.pot
 *.py[cod]
@@ -17,24 +28,34 @@ __pycache__/
 db.sqlite3
 .db
 
-# --- Fichiers de build ou dist ---
+# =========================
+# BUILD / DISTRIBUTION
+# =========================
 build/
 dist/
 *.egg-info/
 
-# --- Config VSCode ---
+# =========================
+# CONFIG ÉDITEURS
+# =========================
 .vscode/
 
-# --- OS ---
+# =========================
+# FICHIERS SYSTÈME
+# =========================
 .DS_Store
 Thumbs.db
 
-# --- Fichiers d’export ou data ---
+# =========================
+# FICHIERS D’EXPORTATION
+# =========================
 *.csv
 *.xlsx
 *.ods
 
-# --- Dossiers de test ou de data ---
+# =========================
+# DOSSIERS DE TEST / DONNÉES
+# =========================
 tests/__pycache__/
 data/
 tmp/

@@ -1,4 +1,8 @@
+
 fastapi
-sqlalchemy
 uvicorn
-pydantic
+sqlalchemy
+jinja2
+python-multipart
+passlib
+itsdangerous
