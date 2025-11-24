@@ -9,13 +9,13 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from .database import SessionLocal
 from . import models
-from .auth import verify_password, get_password_hash  # déjà définis dans auth.py
+from .auth import verify_password, get_password_hash
 
 router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
 
-# IMPORTANT : doit être identique à la clé utilisée dans main.py (SessionMiddleware)
+# IMPORTANT : à modifier
 SECRET_KEY = "CHANGE_ME_SECRET_KEY"
-TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7  # 7 jours
+TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 
 
 def get_serializer():
@@ -30,7 +30,6 @@ def get_db():
         db.close()
 
 
-# ========= Schémas Pydantic =========
 
 class BoutiquePublic(BaseModel):
     id: int
@@ -113,10 +112,8 @@ def get_current_boutique(
     """
     token: str | None = None
 
-    # 1) Priorité au cookie
     if token_cookie:
         token = token_cookie
-    # 2) Fallback sur le header Authorization (utile pour Postman)
     elif authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
 
@@ -172,20 +169,18 @@ def login_boutique(
 
     token = create_token_for_boutique(boutique)
 
-    # ⚠ En local (HTTP simple), Secure=False sinon le cookie ne sera pas envoyé.
-    # En PROD (HTTPS), tu mettras Secure=True impérativement.
     response.set_cookie(
         key="b2b_token",
         value=token,
         httponly=True,
-        secure=False,          # ← passe à True en prod (HTTPS)
+        secure=False,          
         samesite="strict",
         max_age=TOKEN_MAX_AGE_SECONDS,
         path="/",
     )
 
     return LoginResponse(
-        access_token=token,  # le front Next.js n'est pas obligé de s'en servir
+        access_token=token,
         boutique=BoutiquePublic(
             id=boutique.id,
             nom=boutique.nom,
@@ -367,7 +362,6 @@ def create_devis(
     if not payload.lignes:
         raise HTTPException(status_code=400, detail="Le devis doit contenir au moins une ligne")
 
-    # Calcul du prochain numéro de devis pour cette boutique
     max_num = (
         db.query(models.Devis.numero_boutique)
         .filter(models.Devis.boutique_id == boutique.id)
@@ -383,7 +377,7 @@ def create_devis(
         prix_total=0.0,
     )
     db.add(d)
-    db.flush()  # pour avoir d.id
+    db.flush() 
 
     total = 0.0
     lignes_objs = []

@@ -44,7 +44,7 @@ class Boutique(Base):
     statut = Column(SAEnum(BoutiqueStatut), nullable=False, default=BoutiqueStatut.ACTIF)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    mot_de_passe_hash = Column(String, nullable=True)  # pour futur front boutique
+    mot_de_passe_hash = Column(String, nullable=True)
     doit_changer_mdp = Column(Boolean, default=True, nullable=False)
 
     devis = relationship("Devis", back_populates="boutique")
@@ -62,7 +62,6 @@ class Devis(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     boutique_id = Column(Integer, ForeignKey("boutiques.id"), nullable=False)
-    # Numéro propre à la boutique (Paris-#1, Paris-#2, Lyon-#1, etc.).
     numero_boutique = Column(Integer, nullable=False)
     statut = Column(SAEnum(StatutDevis), default=StatutDevis.EN_COURS, nullable=False)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -93,7 +92,7 @@ class LigneDevis(Base):
     id = Column(Integer, primary_key=True, index=True)
     devis_id = Column(Integer, ForeignKey("devis.id"), nullable=False)
     robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=False)
-    description = Column(Text, nullable=True)  # description libre / configuration choisie
+    description = Column(Text, nullable=True) 
     quantite = Column(Integer, default=1, nullable=False)
     prix_unitaire = Column(Float, default=0.0, nullable=False)
 
@@ -106,10 +105,10 @@ class TransformationTarif(Base):
     __tablename__ = "tarifs_transformations"
 
     id = Column(Integer, primary_key=True, index=True)
-    categorie = Column(String, nullable=False)  # ex: Décolleté devant, Bas, Manches, Découpe devant...
-    finition = Column(String, nullable=True)    # ex: Rond, Petit V, Forme U, Évasée...
+    categorie = Column(String, nullable=False) 
+    finition = Column(String, nullable=True)    
     robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
-    epaisseur_ou_option = Column(String, nullable=True)  # ex: "2 épaisseurs", "Boléro", "Robe 3 et 6"
+    epaisseur_ou_option = Column(String, nullable=True)  
     prix = Column(Float, default=0.0, nullable=False)
 
     # Booléens métier:
