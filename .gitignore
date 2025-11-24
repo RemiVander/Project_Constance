@@ -26,7 +26,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 db.sqlite3
-.db
+*.db
 
 # =========================
 # BUILD / DISTRIBUTION
