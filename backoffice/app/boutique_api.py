@@ -1,5 +1,6 @@
 # app/boutique_api.py
 
+import os
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Cookie, Response
@@ -446,6 +447,7 @@ def logout_boutique(response: Response):
     )
     return {"ok": True}
 
+
 @router.get("/devis/{devis_id}/pdf")
 def get_devis_pdf(
     devis_id: int,
@@ -469,93 +471,211 @@ def get_devis_pdf(
         .all()
     )
 
+    # -----------------------------------------
+    # LOGIQUE PRIX
+    # -----------------------------------------
     has_tva = bool(boutique.numero_tva)
-    base_ht = devis.prix_total
+    base_ht = devis.prix_total  # prix interne HT
 
+    # Prix boutique HT ou TTC
     if has_tva:
-        prix_boutique = base_ht                    # HT
+        prix_boutique_unitaire = base_ht
+        prix_boutique_total = base_ht
+        etiquette_boutique = "Prix boutique (HT)"
     else:
-        prix_boutique = base_ht * (1 + TVA_RATE)   # TTC
+        prix_boutique_unitaire = base_ht * (1 + TVA_RATE)
+        prix_boutique_total = prix_boutique_unitaire
+        etiquette_boutique = "Prix boutique (TTC)"
 
-    # Prix conseillé client (marge de la boutique)
+    # Prix client conseillé
     prix_client_ht = base_ht * MARGE
     prix_client_ttc = prix_client_ht * (1 + TVA_RATE)
 
+    montant_tva_client = prix_client_ttc - prix_client_ht
+
+    # -----------------------------------------
+    # GÉNÉRATION DU PDF
+    # -----------------------------------------
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+
     y = height - 50
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, y, f"Devis {boutique.nom}-#{devis.numero_boutique}")
-    y -= 25
+    # -----------------------------------------
+    # LOGO
+    # -----------------------------------------
+    logo_path = os.path.join("app", "static", "logo_bande.png")
+
+    if os.path.exists(logo_path):
+        # Ajuster largeur / hauteur selon ton image
+        c.drawImage(
+            logo_path,
+            50,
+            height - 120,
+            width=350,
+            height=70,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        y = height - 150
+    else:
+        y = height - 50
+
+    # -----------------------------------------
+    # ENTÊTE (infos Constance)
+    # -----------------------------------------
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "SARL Cellier Constance")
+    y -= 14
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, "835 144 866")
+    y -= 14
+    c.drawString(50, y, "3, rue Maryse Bastié – 59840 Pérenchies")
+    y -= 24
+
+    # Date devis
+    if devis.date_creation:
+        c.drawString(50, y, f"Date : {devis.date_creation.strftime('%d/%m/%Y')}")
+    else:
+        c.drawString(50, y, "Date : -")
+    y -= 14
+
+    # Référence devis
+    ref_devis = f"{boutique.nom}-{devis.numero_boutique}"
+    c.drawString(50, y, f"Devis n° : {ref_devis}")
+    y -= 30
+
+    # -----------------------------------------
+    # TITRE
+    # -----------------------------------------
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2, y, "DEVIS")
+    y -= 40
+
+    # -----------------------------------------
+    # BLOC BOUTIQUE
+    # -----------------------------------------
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Boutique :")
+    y -= 16
 
     c.setFont("Helvetica", 10)
-    c.drawString(50, y, f"Boutique : {boutique.nom}")
-    y -= 15
-    c.drawString(50, y, f"Email : {boutique.email or ''}")
-    y -= 15
+    c.drawString(60, y, f"Nom : {boutique.nom}")
+    y -= 14
+    if boutique.adresse:
+        c.drawString(60, y, f"Adresse : {boutique.adresse}")
+        y -= 14
+    if boutique.telephone:
+        c.drawString(60, y, f"Téléphone : {boutique.telephone}")
+        y -= 14
+    if boutique.email:
+        c.drawString(60, y, f"Email : {boutique.email}")
+        y -= 14
     if boutique.numero_tva:
-        c.drawString(50, y, f"Numéro de TVA : {boutique.numero_tva}")
-        y -= 15
+        c.drawString(60, y, f"Numéro de TVA : {boutique.numero_tva}")
+        y -= 14
     else:
-        c.drawString(50, y, "Numéro de TVA : non renseigné")
-        y -= 15
+        c.drawString(60, y, "Numéro de TVA : non renseigné")
+        y -= 14
 
-    if devis.date_creation:
-        c.drawString(50, y, f"Date : {devis.date_creation.strftime('%Y-%m-%d')}")
-        y -= 15
-
-    c.drawString(50, y, f"Statut : {devis.statut.value}")
-    y -= 25
-
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Détail du modèle :")
+    y -= 20
+    c.line(50, y, width - 50, y)
     y -= 20
 
+    # -----------------------------------------
+    # TABLEAU PRINCIPAL
+    # -----------------------------------------
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Détail de la commande")
+    y -= 18
+
+    # En-tête
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y, "Description")
+    c.drawString(300, y, "Quantité")
+    c.drawString(360, y, "Prix unitaire")
+    c.drawString(450, y, "Total")
+    y -= 14
+
+    c.line(50, y, width - 50, y)
+    y -= 14
+
     c.setFont("Helvetica", 10)
+
     for ligne in lignes:
-        if y < 80:
+        if y < 100:  # nouvelle page si trop bas
             c.showPage()
             y = height - 50
             c.setFont("Helvetica", 10)
-        texte = f"- x{ligne.quantite} | {ligne.description or 'Ligne'}"
-        c.drawString(60, y, texte)
-        y -= 15
+
+        desc = ligne.description or "Robe de mariée sur-mesure"
+        quantite = ligne.quantite or 1
+
+        c.drawString(50, y, desc[:60])
+        c.drawString(305, y, str(quantite))
+        c.drawRightString(420, y, f"{prix_boutique_unitaire:.2f} €")
+        c.drawRightString(540, y, f"{prix_boutique_total:.2f} €")
+        y -= 16
 
     y -= 10
+    c.line(50, y, width - 50, y)
+    y -= 22
+
+    # -----------------------------------------
+    # RÉCAP DES MONTANTS
+    # -----------------------------------------
     c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Récapitulatif des montants")
+    y -= 18
+
+    c.setFont("Helvetica", 10)
+
     # Prix boutique
-    if has_tva:
-        c.drawString(50, y, f"Prix boutique (HT) : {prix_boutique:.2f} €")
-        y -= 15
-    else:
-        c.drawString(50, y, f"Prix boutique (TTC) : {prix_boutique:.2f} €")
-        y -= 15
+    c.drawString(60, y, f"{etiquette_boutique} :")
+    c.drawRightString(540, y, f"{prix_boutique_total:.2f} €")
+    y -= 14
 
-    # Prix conseillé client
+    # Prix client conseillé HT si TVA renseignée
     if has_tva:
-        c.drawString(
-            50,
-            y,
-            f"Prix conseillé HT (client) : {prix_client_ht:.2f} €",
-        )
-        y -= 15
+        c.drawString(60, y, "Prix client conseillé (HT) :")
+        c.drawRightString(540, y, f"{prix_client_ht:.2f} €")
+        y -= 14
 
+    # Prix client TTC conseillé
+    c.drawString(60, y, "Prix client conseillé (TTC) :")
+    c.drawRightString(540, y, f"{prix_client_ttc:.2f} €")
+    y -= 14
+
+    if has_tva:
+        c.drawString(60, y, "Montant TVA (20%) sur prix client :")
+        c.drawRightString(540, y, f"{montant_tva_client:.2f} €")
+        y -= 22
+
+    # -----------------------------------------
+    # MENTIONS
+    # -----------------------------------------
+    c.setFont("Helvetica", 9)
+    c.drawString(50, y, "Devis valable 20 jours à compter de sa date d’émission.")
+    y -= 12
+    c.drawString(50, y, "Tout acompte, une fois versé, ne pourra être restitué.")
+    y -= 12
     c.drawString(
         50,
         y,
-        f"Prix conseillé TTC (client) : {prix_client_ttc:.2f} €",
+        "Conditions générales de vente : www.constancecellier.fr/cgv",
     )
-    y -= 15
 
+    # -----------------------------------------
+    # FINALISATION
+    # -----------------------------------------
     c.showPage()
     c.save()
     buffer.seek(0)
 
-    filename = f"devis_{boutique.nom}-{devis.numero_boutique}.pdf".replace(" ", "_")
+    filename = f"devis_{ref_devis}.pdf".replace(" ", "_")
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
     )
