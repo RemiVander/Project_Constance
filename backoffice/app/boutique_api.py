@@ -22,6 +22,8 @@ router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
 # IMPORTANT : à modifier
 SECRET_KEY = "CHANGE_ME_SECRET_KEY"
 TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
+TVA_RATE = 0.20
+MARGE = 2.5 
 
 
 def get_serializer():

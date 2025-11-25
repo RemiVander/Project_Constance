@@ -659,7 +659,7 @@ def edit_boutique_form(boutique_id: int, request: Request, db: Session = Depends
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=303)
     return templates.TemplateResponse(
-        "admin/boutique_edit.html",
+        "admin_boutique_edit.html",
         {"request": request, "boutique": boutique},
     )
 
