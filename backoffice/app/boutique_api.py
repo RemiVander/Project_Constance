@@ -63,7 +63,7 @@ class LoginResponse(BaseModel):
 
 
 class LigneDevisCreate(BaseModel):
-    robe_modele_id: int
+    robe_modele_id: Optional[int] = None
     description: Optional[str] = None
     quantite: int = 1
     prix_unitaire: float
@@ -75,7 +75,7 @@ class DevisCreateRequest(BaseModel):
 
 class LigneDevisPublic(BaseModel):
     id: int
-    robe_modele_id: int
+    robe_modele_id: Optional[int] = None
     description: Optional[str]
     quantite: int
     prix_unitaire: float

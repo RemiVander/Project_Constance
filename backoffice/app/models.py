@@ -92,7 +92,7 @@ class LigneDevis(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     devis_id = Column(Integer, ForeignKey("devis.id"), nullable=False)
-    robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=False)
+    robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
     description = Column(Text, nullable=True) 
     quantite = Column(Integer, default=1, nullable=False)
     prix_unitaire = Column(Float, default=0.0, nullable=False)
