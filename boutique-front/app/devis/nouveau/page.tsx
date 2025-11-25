@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type RobeModele = {
   id: number;
@@ -51,18 +51,13 @@ type OptionsResponse = {
   accessoires: Accessoire[];
 };
 
-const TVA = 0.2; // 20%
-const MARGE_PAR_DEFAUT = 2.5;
-
 export default function NouveauDevisPage() {
   const router = useRouter();
   const [options, setOptions] = useState<OptionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Sélections utilisateur
-  const [robeModeleId, setRobeModeleId] = useState<number | null>(null);
-
+  // IDs des transformations choisies
   const [decDevantId, setDecDevantId] = useState<number | null>(null);
   const [decDosId, setDecDosId] = useState<number | null>(null);
   const [decoupeDevantId, setDecoupeDevantId] = useState<number | null>(null);
@@ -70,26 +65,22 @@ export default function NouveauDevisPage() {
   const [manchesId, setManchesId] = useState<number | null>(null);
   const [basId, setBasId] = useState<number | null>(null);
 
+  // tissus
   const [tissuDevantId, setTissuDevantId] = useState<number | null>(null);
   const [tissuDosId, setTissuDosId] = useState<number | null>(null);
   const [tissuManchesId, setTissuManchesId] = useState<number | null>(null);
   const [tissuBasId, setTissuBasId] = useState<number | null>(null);
   const [tissuCeintureId, setTissuCeintureId] = useState<number | null>(null);
 
+  // finitions + accessoires
   const [finitionsIds, setFinitionsIds] = useState<number[]>([]);
   const [accessoiresIds, setAccessoiresIds] = useState<number[]>([]);
 
   const [avecCeinture, setAvecCeinture] = useState(false);
-  const [marge, setMarge] = useState(MARGE_PAR_DEFAUT);
-  const [affichagePour, setAffichagePour] = useState<"boutique" | "client">(
-    "boutique",
-  );
-  const [quantite, setQuantite] = useState(1);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Chargement des options depuis le back
   useEffect(() => {
     async function load() {
       try {
@@ -110,23 +101,22 @@ export default function NouveauDevisPage() {
     load();
   }, [router]);
 
-  // Helpers pour filtrer les transformations / tissus
+  function getRobeNom(robeId: number | null): string {
+    if (!options || robeId == null) return "";
+    const robe = options.robe_modeles.find((r) => r.id === robeId);
+    return robe ? robe.nom : "";
+  }
+
   function filterTransfos(categorie: string): TransformationTarif[] {
-    if (!options || !robeModeleId) return [];
+    if (!options) return [];
     return options.tarifs_transformations.filter(
-      (t) =>
-        t.categorie === categorie &&
-        (t.robe_modele_id === null || t.robe_modele_id === robeModeleId),
+      (t) => t.categorie === categorie,
     );
   }
 
   function filterTissus(categorie: string): TissuTarif[] {
     if (!options) return [];
-    return options.tarifs_tissus.filter((t) => {
-      if (t.categorie !== categorie) return false;
-      if (robeModeleId == null) return true;
-      return t.robe_modele_id === null || t.robe_modele_id === robeModeleId;
-    });
+    return options.tarifs_tissus.filter((t) => t.categorie === categorie);
   }
 
   function getTransfoById(id: number | null): TransformationTarif | null {
@@ -142,10 +132,7 @@ export default function NouveauDevisPage() {
   function isCeinturePossible(): boolean {
     const decoupeDevant = getTransfoById(decoupeDevantId);
     if (!decoupeDevant) return false;
-    if (!decoupeDevant.ceinture_possible) return false;
-
-    const bas = getTransfoById(basId);
-    return !!bas;
+    return !!decoupeDevant.ceinture_possible;
   }
 
   const doubleDecolleteAlerte = useMemo(() => {
@@ -155,9 +142,9 @@ export default function NouveauDevisPage() {
     return dev.est_decollete && dos.est_decollete;
   }, [decDevantId, decDosId, options]);
 
+  // Prix interne (non affiché à l'écran)
   const prixBaseHt = useMemo(() => {
     if (!options) return 0;
-
     let total = 0;
 
     const addTransfo = (id: number | null) => {
@@ -181,19 +168,20 @@ export default function NouveauDevisPage() {
     addTissu(tissuDosId);
     addTissu(tissuManchesId);
     addTissu(tissuBasId);
-    addTissu(tissuCeintureId && avecCeinture ? tissuCeintureId : null);
+    if (avecCeinture && tissuCeintureId) {
+      addTissu(tissuCeintureId);
+    }
 
     for (const finId of finitionsIds) {
       const f = options.finitions_supplementaires.find((f) => f.id === finId);
       if (f) total += f.prix;
     }
-
     for (const accId of accessoiresIds) {
       const a = options.accessoires.find((a) => a.id === accId);
       if (a) total += a.prix;
     }
 
-    return total * quantite;
+    return total; // 1 robe par devis
   }, [
     options,
     decDevantId,
@@ -210,22 +198,10 @@ export default function NouveauDevisPage() {
     avecCeinture,
     finitionsIds,
     accessoiresIds,
-    quantite,
   ]);
-
-  const prixClient = useMemo(() => {
-    const htClient = prixBaseHt * marge;
-    const ttcClient = htClient * (1 + TVA);
-    return { htClient, ttcClient };
-  }, [prixBaseHt, marge]);
 
   async function handleSubmit() {
     setSaveError(null);
-
-    if (!robeModeleId) {
-      setSaveError("Veuillez choisir un modèle de robe.");
-      return;
-    }
 
     if (prixBaseHt <= 0) {
       setSaveError("Le devis est vide ou incomplet.");
@@ -234,30 +210,30 @@ export default function NouveauDevisPage() {
 
     setSaving(true);
     try {
-      const description = "Devis généré depuis le front boutique";
+      const description =
+        "Devis généré depuis le front boutique (robe entièrement personnalisée)";
 
       const created = (await apiFetch("/api/boutique/devis", {
         method: "POST",
         body: JSON.stringify({
           lignes: [
             {
-              robe_modele_id: robeModeleId,
+              robe_modele_id: null,
               description,
-              quantite,
-              prix_unitaire: prixBaseHt / quantite,
+              quantite: 1,
+              prix_unitaire: prixBaseHt,
             },
           ],
         }),
       })) as any;
 
-      window.alert("Devis créé avec succès. Le téléchargement va démarrer.");
-
+      // Redirection vers une page de confirmation,
+      // où l'on pourra télécharger les PDFs
       if (created && created.id) {
-        const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${created.id}/pdf`;
-        window.open(pdfUrl, "_blank");
+        router.push(`/devis/${created.id}/confirmation`);
+      } else {
+        router.push("/dashboard");
       }
-
-      router.push("/dashboard");
     } catch (err: any) {
       setSaveError(err.message || "Erreur lors de la création du devis");
     } finally {
@@ -265,8 +241,7 @@ export default function NouveauDevisPage() {
     }
   }
 
-  // --- États de chargement / erreur pour éviter l'erreur 'null.robe_modeles' ---
-
+  // États de chargement / erreur
   if (loading) {
     return <p>Chargement des options...</p>;
   }
@@ -291,8 +266,6 @@ export default function NouveauDevisPage() {
     );
   }
 
-  // --- Rendu principal une fois les options chargées ---
-
   return (
     <div className="space-y-6">
       <nav className="text-xs text-gray-500 mb-2">
@@ -307,32 +280,9 @@ export default function NouveauDevisPage() {
         </div>
       )}
 
-      {/* Sélection du modèle de robe */}
-      <div className="bg-gray-50 border rounded-xl p-4 mb-4">
-        <label className="block text-sm font-medium mb-1">
-          Modèle de robe
-        </label>
-        <select
-          className="border rounded px-3 py-2 text-sm w-full max-w-xs"
-          value={robeModeleId ?? ""}
-          onChange={(e) =>
-            setRobeModeleId(e.target.value ? Number(e.target.value) : null)
-          }
-        >
-          <option value="">Sélectionner un modèle</option>
-          {options.robe_modeles.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.nom}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-gray-500 mt-1">
-          Exemple : Alizé, Bora, Eurus, Ghibli, Mistral, Zephyr...
-        </p>
-      </div>
-
-      {/* Silhouette simplifiée : Devant / Dos */}
+      {/* Devant / Dos */}
       <div className="grid md:grid-cols-2 gap-6">
+        {/* DEVANT */}
         <div className="bg-white border rounded-xl p-4">
           <h2 className="font-semibold mb-3">Devant</h2>
 
@@ -349,15 +299,20 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté devant").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Décolleté devant").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -376,15 +331,20 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe devant").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Découpe devant").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -399,15 +359,20 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Manches").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Manches").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -422,15 +387,20 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Bas").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Bas").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -452,7 +422,7 @@ export default function NouveauDevisPage() {
                 <option value="">Aucun</option>
                 {filterTissus("devant").map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.detail} ({t.prix} €)
+                    {t.detail}
                   </option>
                 ))}
               </select>
@@ -474,7 +444,7 @@ export default function NouveauDevisPage() {
                 <option value="">Aucun</option>
                 {filterTissus("Manches").map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.detail} ({t.prix} €)
+                    {t.detail}
                   </option>
                 ))}
               </select>
@@ -497,7 +467,7 @@ export default function NouveauDevisPage() {
                 {filterTissus("Bas").map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.detail}
-                    {t.forme ? ` – ${t.forme}` : ""} ({t.prix} €)
+                    {t.forme ? ` – ${t.forme}` : ""}
                   </option>
                 ))}
               </select>
@@ -532,7 +502,7 @@ export default function NouveauDevisPage() {
                     <option value="">Aucun</option>
                     {filterTissus("Ceinture").map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.detail} ({t.prix} €)
+                        {t.detail}
                       </option>
                     ))}
                   </select>
@@ -542,6 +512,7 @@ export default function NouveauDevisPage() {
           )}
         </div>
 
+        {/* DOS */}
         <div className="bg-white border rounded-xl p-4">
           <h2 className="font-semibold mb-3">Dos</h2>
 
@@ -558,15 +529,20 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté dos").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Décolleté dos").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -585,21 +561,28 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe dos").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.finition}
-                  {t.epaisseur_ou_option
-                    ? ` – ${t.epaisseur_ou_option}`
-                    : ""}{" "}
-                  ({t.prix} €)
-                </option>
-              ))}
+              {filterTransfos("Découpe dos").map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const baseLabel = t.epaisseur_ou_option
+                  ? `${t.finition} – ${t.epaisseur_ou_option}`
+                  : t.finition;
+                const label = robeNom
+                  ? `[${robeNom}] ${baseLabel}`
+                  : baseLabel;
+                return (
+                  <option key={t.id} value={t.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
           {/* Tissu dos */}
           <div className="mb-3">
-            <label className="block text-sm font-medium mb-1">Tissu dos</label>
+            <label className="block text-sm font-medium mb-1">
+              Tissu dos
+            </label>
             <select
               className="border rounded px-3 py-2 text-sm w-full"
               value={tissuDosId ?? ""}
@@ -612,7 +595,7 @@ export default function NouveauDevisPage() {
               <option value="">Aucun</option>
               {filterTissus("Dos").map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.detail} ({t.prix} €)
+                  {t.detail}
                 </option>
               ))}
             </select>
@@ -639,9 +622,7 @@ export default function NouveauDevisPage() {
                       }
                     }}
                   />
-                  <span>
-                    {f.nom} ({f.prix} €)
-                  </span>
+                  <span>{f.nom}</span>
                 </label>
               ))}
             </div>
@@ -668,9 +649,7 @@ export default function NouveauDevisPage() {
                       }
                     }}
                   />
-                  <span>
-                    {a.nom} ({a.prix} €)
-                  </span>
+                  <span>{a.nom}</span>
                 </label>
               ))}
             </div>
@@ -686,105 +665,23 @@ export default function NouveauDevisPage() {
         </div>
       )}
 
-      {/* Résumé prix & création du devis */}
-      <div className="bg-white border rounded-xl p-4 flex flex-col md:flex-row md:items-end gap-4 justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium">Quantité</label>
-            <input
-              type="number"
-              min={1}
-              className="border rounded px-2 py-1 text-sm w-16"
-              value={quantite}
-              onChange={(e) =>
-                setQuantite(Math.max(1, Number(e.target.value) || 1))
-              }
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium">Affichage pour :</span>
-            <button
-              type="button"
-              onClick={() => setAffichagePour("boutique")}
-              className={`px-3 py-1 text-xs rounded-full border ${
-                affichagePour === "boutique"
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700"
-              }`}
-            >
-              Boutique
-            </button>
-            <button
-              type="button"
-              onClick={() => setAffichagePour("client")}
-              className={`px-3 py-1 text-xs rounded-full border ${
-                affichagePour === "client"
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700"
-              }`}
-            >
-              Client final
-            </button>
-          </div>
-
-          {affichagePour === "client" && (
-            <div className="flex items-center gap-3">
-              <label className="text-sm">
-                Marge (x) :
-                <input
-                  type="number"
-                  step={0.1}
-                  min={1}
-                  className="ml-2 border rounded px-2 py-1 text-sm w-20"
-                  value={marge}
-                  onChange={(e) =>
-                    setMarge(Math.max(1, Number(e.target.value) || 1))
-                  }
-                />
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-1 text-right">
-          <p className="text-sm">
-            Prix base HT (boutique) :{" "}
-            <span className="font-semibold">
-              {prixBaseHt.toFixed(2)} €
-            </span>
-          </p>
-
-          {affichagePour === "client" && (
-            <>
-              <p className="text-sm">
-                Prix client HT :{" "}
-                <span className="font-semibold">
-                  {prixClient.htClient.toFixed(2)} €
-                </span>
-              </p>
-              <p className="text-sm">
-                Prix client TTC :{" "}
-                <span className="font-semibold">
-                  {prixClient.ttcClient.toFixed(2)} €
-                </span>
-              </p>
-            </>
-          )}
-
-          {saveError && (
-            <p className="text-xs text-red-600 mt-1">{saveError}</p>
-          )}
-
-          <button
-            type="button"
-            disabled={saving || prixBaseHt <= 0 || !robeModeleId}
-            onClick={handleSubmit}
-            className="mt-2 inline-flex justify-center bg-gray-900 text-white text-sm font-semibold px-4 py-2 rounded disabled:opacity-50"
-          >
-            {saving ? "Création en cours..." : "Créer le devis"}
-          </button>
-        </div>
+      {/* Zone validation avec bouton centré */}
+      <div className="bg-white border rounded-xl p-6 flex flex-col items-center gap-2">
+        {saveError && (
+          <p className="text-xs text-red-600 text-center">{saveError}</p>
+        )}
+        <p className="text-xs text-gray-500 text-center">
+          Le prix ne sera pas affiché ici. Il apparaîtra uniquement dans le PDF
+          du devis une fois créé.
+        </p>
+        <button
+          type="button"
+          disabled={saving || prixBaseHt <= 0}
+          onClick={handleSubmit}
+          className="mt-2 inline-flex justify-center bg-gray-900 text-white text-sm font-semibold px-6 py-2 rounded-full disabled:opacity-50"
+        >
+          {saving ? "Création du devis..." : "Créer le devis"}
+        </button>
       </div>
     </div>
   );

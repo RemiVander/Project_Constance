@@ -10,6 +10,7 @@ from .database import SessionLocal
 from .auth import get_current_admin, get_password_hash
 from . import models
 from .email_utils import send_boutique_password_email
+from .auth import require_admin 
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -650,3 +651,47 @@ def delete_accessoire(
         db.delete(a)
         db.commit()
     return RedirectResponse(url="/admin/produits/accessoires", status_code=302)
+
+
+@router.get("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
+def edit_boutique_form(boutique_id: int, request: Request, db: Session = Depends(get_db)):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=303)
+    return templates.TemplateResponse(
+        "admin/boutique_edit.html",
+        {"request": request, "boutique": boutique},
+    )
+
+
+@router.post("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
+def edit_boutique_submit(
+    boutique_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    nom: str = Form(...),
+    email: str = Form(...),
+    gerant: str = Form(""),
+    telephone: str = Form(""),
+    adresse: str = Form(""),
+    numero_tva: str = Form(""),
+    actif: bool = Form(False),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=303)
+
+    boutique.nom = nom
+    boutique.email = email
+    boutique.gerant = gerant or None
+    boutique.telephone = telephone or None
+    boutique.adresse = adresse or None
+    boutique.numero_tva = numero_tva or None
+    boutique.actif = actif
+
+    db.add(boutique)
+    db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/boutiques/{boutique_id}", status_code=303
+    )

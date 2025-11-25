@@ -51,3 +51,17 @@ def get_current_admin(request: Request, db: Session = Depends(get_db)) -> models
     if not admin:
         raise HTTPException(status_code=401, detail="Non authentifié")
     return admin
+
+def require_admin(request: Request):
+    """
+    Dépendance FastAPI utilisée pour protéger les routes /admin.
+    Elle vérifie qu'un admin est connecté dans la session.
+    """
+    admin_id = request.session.get("admin_id")
+    if not admin_id:
+        raise HTTPException(
+            status_code=302,
+            detail="Redirection vers la connexion admin",
+            headers={"Location": "/admin/login"},
+        )
+    return admin_id

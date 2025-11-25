@@ -461,17 +461,27 @@ def get_devis_pdf(
     if not devis:
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
-    # On charge les lignes pour afficher le détail
     lignes = (
         db.query(models.LigneDevis)
         .filter(models.LigneDevis.devis_id == devis.id)
         .all()
     )
 
+    has_tva = bool(boutique.numero_tva)
+    base_ht = devis.prix_total
+
+    if has_tva:
+        prix_boutique = base_ht                    # HT
+    else:
+        prix_boutique = base_ht * (1 + TVA_RATE)   # TTC
+
+    # Prix conseillé client (marge de la boutique)
+    prix_client_ht = base_ht * MARGE
+    prix_client_ttc = prix_client_ht * (1 + TVA_RATE)
+
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
-
     y = height - 50
 
     c.setFont("Helvetica-Bold", 14)
@@ -483,6 +493,13 @@ def get_devis_pdf(
     y -= 15
     c.drawString(50, y, f"Email : {boutique.email or ''}")
     y -= 15
+    if boutique.numero_tva:
+        c.drawString(50, y, f"Numéro de TVA : {boutique.numero_tva}")
+        y -= 15
+    else:
+        c.drawString(50, y, "Numéro de TVA : non renseigné")
+        y -= 15
+
     if devis.date_creation:
         c.drawString(50, y, f"Date : {devis.date_creation.strftime('%Y-%m-%d')}")
         y -= 15
@@ -491,7 +508,7 @@ def get_devis_pdf(
     y -= 25
 
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Lignes du devis :")
+    c.drawString(50, y, "Détail du modèle :")
     y -= 20
 
     c.setFont("Helvetica", 10)
@@ -500,14 +517,34 @@ def get_devis_pdf(
             c.showPage()
             y = height - 50
             c.setFont("Helvetica", 10)
-
-        texte = f"- x{ligne.quantite} | {ligne.description or 'Ligne'} | {ligne.prix_unitaire:.2f} € HT"
+        texte = f"- x{ligne.quantite} | {ligne.description or 'Ligne'}"
         c.drawString(60, y, texte)
         y -= 15
 
     y -= 10
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, f"Total HT : {devis.prix_total:.2f} €")
+    # Prix boutique
+    if has_tva:
+        c.drawString(50, y, f"Prix boutique (HT) : {prix_boutique:.2f} €")
+        y -= 15
+    else:
+        c.drawString(50, y, f"Prix boutique (TTC) : {prix_boutique:.2f} €")
+        y -= 15
+
+    # Prix conseillé client
+    if has_tva:
+        c.drawString(
+            50,
+            y,
+            f"Prix conseillé HT (client) : {prix_client_ht:.2f} €",
+        )
+        y -= 15
+
+    c.drawString(
+        50,
+        y,
+        f"Prix conseillé TTC (client) : {prix_client_ttc:.2f} €",
+    )
     y -= 15
 
     c.showPage()
@@ -520,4 +557,3 @@ def get_devis_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-

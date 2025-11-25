@@ -41,6 +41,7 @@ class Boutique(Base):
     gerant = Column(String, nullable=True)
     telephone = Column(String, nullable=True)
     adresse = Column(Text, nullable=True)
+    numero_tva = Column(String(64), nullable=True)
     statut = Column(SAEnum(BoutiqueStatut), nullable=False, default=BoutiqueStatut.ACTIF)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
 
