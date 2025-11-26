@@ -1,7 +1,5 @@
-# app/boutique_api.py
-
 import os
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Cookie, Response
 from pydantic import BaseModel, EmailStr
@@ -24,7 +22,8 @@ router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
 SECRET_KEY = "CHANGE_ME_SECRET_KEY"
 TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 TVA_RATE = 0.20
-MARGE = 2.5 
+MARGE_BOUTIQUE = 2.5 
+MARGE_CREATRICE = 1.6
 
 
 def get_serializer():
@@ -95,6 +94,26 @@ class DevisPublic(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class MesureTypePublic(BaseModel):
+    id: int
+    code: str
+    label: str
+    obligatoire: bool
+    ordre: int
+
+    model_config = {"from_attributes": True}
+
+
+class MesureValeurPayload(BaseModel):
+    mesure_type_id: int
+    valeur: float
+
+
+class UpdateDevisStatutPayload(BaseModel):
+    statut: Literal["EN_COURS", "ACCEPTE", "REFUSE"]
+    mesures: Optional[List[MesureValeurPayload]] = None
+
 
 
 class ChangePasswordRequest(BaseModel):
@@ -475,7 +494,7 @@ def get_devis_pdf(
     # LOGIQUE PRIX
     # -----------------------------------------
     has_tva = bool(boutique.numero_tva)
-    base_ht = devis.prix_total  # prix interne HT
+    base_ht = devis.prix_total * MARGE_CREATRICE
 
     # Prix boutique HT ou TTC
     if has_tva:
@@ -488,7 +507,7 @@ def get_devis_pdf(
         etiquette_boutique = "Prix boutique (TTC)"
 
     # Prix client conseillé
-    prix_client_ht = base_ht * MARGE
+    prix_client_ht = base_ht * MARGE_BOUTIQUE
     prix_client_ttc = prix_client_ht * (1 + TVA_RATE)
 
     montant_tva_client = prix_client_ttc - prix_client_ht
@@ -679,3 +698,170 @@ def get_devis_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
     )
+
+@router.get("/devis/{devis_id}/bon-commande.pdf")
+def get_bon_commande_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
+        )
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    if devis.statut != models.StatutDevis.ACCEPTE:
+        raise HTTPException(
+            status_code=400,
+            detail="Le bon de commande n'est disponible que pour les devis acceptés."
+        )
+
+    # calcul du prix facturé à la boutique (tu peux reprendre la même logique que dans get_devis_pdf)
+    TVA_RATE = 0.20
+    has_tva = bool(boutique.numero_tva)
+    base_ht = devis.prix_total  # ton prix interne HT
+
+    if has_tva:
+        prix_boutique_total = base_ht
+        etiquette_boutique = "Prix facturé à la boutique (HT)"
+    else:
+        prix_boutique_total = base_ht * (1 + TVA_RATE)
+        etiquette_boutique = "Prix facturé à la boutique (TTC)"
+
+    # Génération PDF (très simplifiée pour l’exemple)
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    y = height - 50
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y, "Bon de commande")
+    y -= 24
+
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, f"Boutique : {boutique.nom}")
+    y -= 14
+    c.drawString(50, y, f"Devis n° {devis.numero_boutique} (id interne {devis.id})")
+    y -= 24
+
+    # prix facturé à la boutique
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, etiquette_boutique + f" : {prix_boutique_total:.2f} €")
+    y -= 24
+
+    # bloc mesures
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Mesures :")
+    y -= 18
+    c.setFont("Helvetica", 10)
+
+    for dm in devis.mesures:
+        label = dm.mesure_type.label if dm.mesure_type else f"Mesure #{dm.mesure_type_id}"
+        c.drawString(60, y, f"- {label}: {dm.valeur:.1f} cm")
+        y -= 14
+        if y < 80:
+            c.showPage()
+            y = height - 50
+            c.setFont("Helvetica", 10)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="bon_commande_devis_{devis.id}.pdf"'
+        },
+    )
+
+@router.get("/mesures/types", response_model=List[MesureTypePublic])
+def list_mesure_types(
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    """
+    Retourne la liste des types de mesures configurés (tour de poitrine, taille, etc.)
+    visible par une boutique connectée.
+    """
+    types = (
+        db.query(models.MesureType)
+        .order_by(models.MesureType.ordre, models.MesureType.id)
+        .all()
+    )
+    return types
+
+@router.post("/devis/{devis_id}/statut", response_model=DevisPublic)
+def update_devis_statut(
+    devis_id: int,
+    payload: UpdateDevisStatutPayload,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    """
+    Permet à une boutique de changer le statut d'un devis :
+    - EN_COURS
+    - ACCEPTE (avec mesures obligatoires)
+    - REFUSE
+
+    Si le statut passe à ACCEPTE, on enregistre / remplace les mesures.
+    """
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
+        )
+        .first()
+    )
+
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    if payload.statut == "ACCEPTE":
+        if not payload.mesures or len(payload.mesures) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Les mesures sont obligatoires pour accepter un devis.",
+            )
+
+        devis.mesures.clear()
+
+        for m in payload.mesures:
+            mesure_type = (
+                db.query(models.MesureType)
+                .filter(models.MesureType.id == m.mesure_type_id)
+                .first()
+            )
+            if not mesure_type:
+                continue
+
+            devis.mesures.append(
+                models.DevisMesure(
+                    mesure_type_id=mesure_type.id,
+                    valeur=m.valeur,
+                )
+            )
+
+    # Mise à jour du statut (EN_COURS, ACCEPTE, REFUSE)
+    try:
+        devis.statut = models.StatutDevis(payload.statut)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Statut invalide.",
+        )
+
+    db.add(devis)
+    db.commit()
+    db.refresh(devis)
+    return devis
+

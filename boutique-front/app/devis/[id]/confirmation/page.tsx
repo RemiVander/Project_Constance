@@ -7,8 +7,7 @@ export default function DevisConfirmationPage() {
   const params = useParams();
   const router = useRouter();
 
-  // params.id peut être string ou string[]
-  const rawId = params?.id;
+  const rawId = params?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   if (!id) {
@@ -30,7 +29,7 @@ export default function DevisConfirmationPage() {
     );
   }
 
-  const pdfUrl = `/api/boutique/devis/${id}/pdf`;
+ const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${id}/pdf`;
 
 
   return (

@@ -40,6 +40,10 @@
                 <a href="/admin/finitions_supplementaires" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='finitions_supp' else 'hover:bg-gray-100' }}">
                     Finitions supplémentaires
                 </a>
+                <a href="/admin/produits/mesures"
+                    class="block px-3 py-2 rounded text-sm {% if sous_page=='mesures' %}bg-gray-200 text-gray-900 font-semibold{% else %}hover:bg-gray-100{% endif %}">
+                        Types de mesures
+                </a>
                 <a href="/admin/produits/accessoires" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='accessoires' else 'hover:bg-gray-100' }}">
                     Accessoires
                 </a>

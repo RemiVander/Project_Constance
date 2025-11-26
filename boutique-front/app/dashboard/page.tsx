@@ -24,7 +24,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <nav className="text-xs text-gray-500">Accueil &gt; Tableau de bord</nav>
 
       <h1 className="text-2xl font-bold">Bonjour, {me.nom}</h1>
 

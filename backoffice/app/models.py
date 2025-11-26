@@ -70,6 +70,7 @@ class Devis(Base):
 
     boutique = relationship("Boutique", back_populates="devis")
     lignes = relationship("LigneDevis", back_populates="devis", cascade="all, delete-orphan")
+    mesures = relationship("DevisMesure", back_populates="devis", cascade="all, delete-orphan")
 
 
 class RobeModele(Base):
@@ -152,3 +153,32 @@ class Accessoire(Base):
     nom = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     prix = Column(Float, default=0.0, nullable=False)
+
+
+class MesureType(Base):
+    """
+    Types de mesures possibles (tour de poitrine, taille, bassin, etc.),
+    configurable par l'admin.
+    """
+    __tablename__ = "mesure_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False)  # ex: "tour_poitrine"
+    label = Column(String, nullable=False)              # ex: "Tour de poitrine"
+    obligatoire = Column(Boolean, default=True, nullable=False)
+    ordre = Column(Integer, default=0, nullable=False)
+
+
+class DevisMesure(Base):
+    """
+    Valeur d'une mesure pour un devis donné.
+    """
+    __tablename__ = "devis_mesures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devis_id = Column(Integer, ForeignKey("devis.id", ondelete="CASCADE"), nullable=False)
+    mesure_type_id = Column(Integer, ForeignKey("mesure_types.id"), nullable=False)
+    valeur = Column(Float, nullable=True)  # tu peux passer en String si tu veux des valeurs plus libres
+
+    devis = relationship("Devis", back_populates="mesures")
+    mesure_type = relationship("MesureType")

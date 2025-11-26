@@ -695,3 +695,88 @@ def edit_boutique_submit(
     return RedirectResponse(
         url=f"/admin/boutiques/{boutique_id}", status_code=303
     )
+
+# ========= Produits : types de mesures =========
+
+@router.get("/admin/produits/mesures")
+def admin_mesures_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    mesures = (
+        db.query(models.MesureType)
+        .order_by(models.MesureType.ordre, models.MesureType.id)
+        .all()
+    )
+    return templates.TemplateResponse(
+        "admin_mesures.html",
+        {
+            "request": request,
+            "admin": admin,
+            "mesures": mesures,
+            "page": "produits",
+            "sous_page": "mesures",
+        },
+    )
+
+
+@router.post("/admin/produits/mesures/create")
+def admin_mesure_create(
+    request: Request,
+    label: str = Form(...),
+    code: str = Form(""),
+    obligatoire: str = Form("on"),
+    ordre: int = Form(0),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    # si l'admin laisse le code vide, on le dérive du label
+    code_final = code.strip() or label.lower().replace(" ", "_").replace("'", "").replace("/", "_")
+
+    m = models.MesureType(
+        code=code_final,
+        label=label.strip(),
+        obligatoire=(obligatoire == "on"),
+        ordre=ordre,
+    )
+    db.add(m)
+    db.commit()
+    return RedirectResponse(url="/admin/produits/mesures", status_code=303)
+
+
+@router.post("/admin/produits/mesures/{mesure_id}/update")
+def admin_mesure_update(
+    mesure_id: int,
+    request: Request,
+    label: str = Form(...),
+    obligatoire: str = Form("off"),
+    ordre: int = Form(0),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    m = db.query(models.MesureType).get(mesure_id)
+    if not m:
+        return RedirectResponse(url="/admin/produits/mesures", status_code=303)
+
+    m.label = label.strip()
+    m.obligatoire = (obligatoire == "on")
+    m.ordre = ordre
+
+    db.add(m)
+    db.commit()
+    return RedirectResponse(url="/admin/produits/mesures", status_code=303)
+
+
+@router.post("/admin/produits/mesures/{mesure_id}/delete")
+def admin_mesure_delete(
+    mesure_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    m = db.query(models.MesureType).get(mesure_id)
+    if m:
+        db.delete(m)
+        db.commit()
+    return RedirectResponse(url="/admin/produits/mesures", status_code=303)

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { Breadcrumb } from "@/components/Breadcrumb";
+
 
 type RobeModele = {
   id: number;
@@ -268,9 +270,14 @@ export default function NouveauDevisPage() {
 
   return (
     <div className="space-y-6">
-      <nav className="text-xs text-gray-500 mb-2">
-        Accueil &gt; Tableau de bord &gt; Créer un devis
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: "Tableau de bord", href: "/dashboard" },
+          { label: "Devis", href: "/historique" }, // ou autre route que tu préfères
+          { label: "Nouveau devis" }, // étape courante non cliquable
+        ]}
+      />
+
 
       <h1 className="text-2xl font-bold mb-2">Créer un devis</h1>
 
