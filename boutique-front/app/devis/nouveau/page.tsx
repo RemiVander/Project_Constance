@@ -144,7 +144,6 @@ export default function NouveauDevisPage() {
     return dev.est_decollete && dos.est_decollete;
   }, [decDevantId, decDosId, options]);
 
-  // Prix interne (non affiché à l'écran)
   const prixBaseHt = useMemo(() => {
     if (!options) return 0;
     let total = 0;
@@ -183,7 +182,7 @@ export default function NouveauDevisPage() {
       if (a) total += a.prix;
     }
 
-    return total; // 1 robe par devis
+    return total; 
   }, [
     options,
     decDevantId,
@@ -677,10 +676,6 @@ export default function NouveauDevisPage() {
         {saveError && (
           <p className="text-xs text-red-600 text-center">{saveError}</p>
         )}
-        <p className="text-xs text-gray-500 text-center">
-          Le prix ne sera pas affiché ici. Il apparaîtra uniquement dans le PDF
-          du devis une fois créé.
-        </p>
         <button
           type="button"
           disabled={saving || prixBaseHt <= 0}

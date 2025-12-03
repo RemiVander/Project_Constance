@@ -56,7 +56,6 @@ export default function DevisConfirmationPage() {
           >
             Télécharger le devis (PDF)
           </a>
-
           <button
             type="button"
             onClick={() => router.push("/dashboard")}

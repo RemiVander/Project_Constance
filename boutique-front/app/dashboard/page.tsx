@@ -39,11 +39,13 @@ export default function Dashboard() {
         </button>
 
         <button
-          onClick={() => router.push("/devis")}
+          onClick={() => router.push("/devis/suivi")}
           className="bg-white border rounded-xl p-4 shadow hover:shadow-md"
         >
           <h2 className="font-semibold">Suivre un devis</h2>
-          <p className="text-sm text-gray-500">Voir vos devis en cours.</p>
+          <p className="text-sm text-gray-500">
+            Voir vos devis en cours.
+          </p>
         </button>
 
         <button

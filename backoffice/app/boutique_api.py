@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from typing import List, Optional, Literal
 
@@ -722,19 +723,27 @@ def get_bon_commande_pdf(
             detail="Le bon de commande n'est disponible que pour les devis acceptés."
         )
 
-    # calcul du prix facturé à la boutique (tu peux reprendre la même logique que dans get_devis_pdf)
-    TVA_RATE = 0.20
     has_tva = bool(boutique.numero_tva)
-    base_ht = devis.prix_total  # ton prix interne HT
 
-    if has_tva:
-        prix_boutique_total = base_ht
-        etiquette_boutique = "Prix facturé à la boutique (HT)"
+    bon_commande = devis.bon_commande
+
+    if bon_commande:
+        if has_tva:
+            prix_boutique_total = bon_commande.montant_boutique_ht
+            etiquette_boutique = "Prix facturé à la boutique (HT)"
+        else:
+            prix_boutique_total = bon_commande.montant_boutique_ttc
+            etiquette_boutique = "Prix facturé à la boutique (TTC)"
     else:
-        prix_boutique_total = base_ht * (1 + TVA_RATE)
-        etiquette_boutique = "Prix facturé à la boutique (TTC)"
+        base_ht = devis.prix_total 
+        if has_tva:
+            prix_boutique_total = base_ht
+            etiquette_boutique = "Prix facturé à la boutique (HT)"
+        else:
+            prix_boutique_total = base_ht * (1 + TVA_RATE)
+            etiquette_boutique = "Prix facturé à la boutique (TTC)"
 
-    # Génération PDF (très simplifiée pour l’exemple)
+    # Génération PDF
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -812,7 +821,9 @@ def update_devis_statut(
     - ACCEPTE (avec mesures obligatoires)
     - REFUSE
 
-    Si le statut passe à ACCEPTE, on enregistre / remplace les mesures.
+    Si le statut passe à ACCEPTE :
+      - on enregistre / remplace les mesures
+      - on crée / met à jour le bon de commande en base.
     """
     devis = (
         db.query(models.Devis)
@@ -827,6 +838,7 @@ def update_devis_statut(
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
     if payload.statut == "ACCEPTE":
+        # ----- mesures obligatoires -----
         if not payload.mesures or len(payload.mesures) == 0:
             raise HTTPException(
                 status_code=400,
@@ -851,6 +863,28 @@ def update_devis_statut(
                 )
             )
 
+        # ----- calcul des montants pour le bon de commande -----
+        has_tva = bool(boutique.numero_tva)
+        base_ht = devis.prix_total
+
+        montant_boutique_ht = base_ht
+        montant_boutique_ttc = base_ht * (1 + TVA_RATE)
+
+        # création / mise à jour du bon de commande
+        if devis.bon_commande:
+            bc = devis.bon_commande
+            bc.montant_boutique_ht = montant_boutique_ht
+            bc.montant_boutique_ttc = montant_boutique_ttc
+            bc.has_tva = has_tva
+        else:
+            bc = models.BonCommande(
+                devis=devis,
+                montant_boutique_ht=montant_boutique_ht,
+                montant_boutique_ttc=montant_boutique_ttc,
+                has_tva=has_tva,
+            )
+            db.add(bc)
+
     # Mise à jour du statut (EN_COURS, ACCEPTE, REFUSE)
     try:
         devis.statut = models.StatutDevis(payload.statut)
@@ -864,4 +898,44 @@ def update_devis_statut(
     db.commit()
     db.refresh(devis)
     return devis
+
+
+class BonCommandePublic(BaseModel):
+  id: int
+  devis_id: int
+  numero_devis: int
+  date_creation: datetime
+  montant_boutique_ht: float
+  montant_boutique_ttc: float
+  has_tva: bool
+
+  model_config = {"from_attributes": True}
+
+@router.get("/bons-commande", response_model=List[BonCommandePublic])
+def list_bons_commande(
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    bons = (
+        db.query(models.BonCommande)
+        .join(models.Devis)
+        .filter(models.Devis.boutique_id == boutique.id)
+        .order_by(models.BonCommande.date_creation.desc())
+        .all()
+    )
+
+    result = []
+    for bc in bons:
+        result.append(
+            BonCommandePublic(
+                id=bc.id,
+                devis_id=bc.devis_id,
+                numero_devis=bc.devis.numero_boutique,
+                date_creation=bc.date_creation,
+                montant_boutique_ht=bc.montant_boutique_ht,
+                montant_boutique_ttc=bc.montant_boutique_ttc,
+                has_tva=bc.has_tva,
+            )
+        )
+    return result
 

@@ -17,7 +17,7 @@ export default function RootLayout({
         <div
           className="min-h-screen flex flex-col"
           style={{
-            backgroundImage: "url('/background-robe.jpg')",
+            backgroundImage: "url('/images/background.jpg')",
             backgroundSize: "cover",
             backgroundPosition: "center",
             backgroundRepeat: "no-repeat",

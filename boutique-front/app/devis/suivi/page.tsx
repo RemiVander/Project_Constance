@@ -1,0 +1,221 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiFetch, API_BASE_URL } from "@/lib/api";
+
+type Devis = {
+  id: number;
+  numero_boutique: number;
+  statut: string;
+  date_creation?: string | null;
+  prix_total: number;
+};
+
+export default function SuiviDevisPage() {
+  const router = useRouter();
+  const [devis, setDevis] = useState<Devis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<number | null>(null);
+  const [filtreStatut, setFiltreStatut] = useState<"TOUS" | "EN_COURS" | "ACCEPTE" | "REFUSE">("EN_COURS");
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await apiFetch("/api/boutique/devis");
+        setDevis(data as Devis[]);
+      } catch (e: any) {
+        setErrorMsg(e.message || "Erreur lors du chargement des devis");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  function formatDate(iso?: string | null) {
+    if (!iso) return "-";
+    return new Date(iso).toLocaleDateString("fr-FR");
+  }
+
+  function formatStatut(statut: string) {
+    switch (statut) {
+      case "EN_COURS":
+        return "En cours";
+      case "ACCEPTE":
+        return "Validé";
+      case "REFUSE":
+        return "Refusé";
+      default:
+        return statut;
+    }
+  }
+
+  async function handleRefuser(id: number) {
+    if (!confirm("Confirmer le refus de ce devis ?")) return;
+    setActionId(id);
+    try {
+      await apiFetch(`/api/boutique/devis/${id}/statut`, {
+        method: "POST",
+        body: JSON.stringify({
+          statut: "REFUSE",
+          mesures: null,
+        }),
+      });
+      setDevis((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, statut: "REFUSE" } : d))
+      );
+    } catch (e: any) {
+      alert(e.message || "Erreur lors du refus du devis");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  function handleValider(id: number) {
+    router.push(`/devis/${id}/mesures`);
+  }
+
+  const devisFiltres = devis.filter((d) =>
+    filtreStatut === "TOUS" ? true : d.statut === filtreStatut
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="bg-white rounded shadow p-4 text-sm text-gray-600">
+          Chargement des devis...
+        </div>
+      </div>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="bg-white rounded shadow p-6 max-w-md w-full text-center">
+          <h1 className="text-xl font-semibold mb-2">
+            Impossible de charger les devis
+          </h1>
+          <p className="text-sm text-gray-600 mb-4">{errorMsg}</p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="px-4 py-2 rounded bg-gray-900 text-white text-sm font-semibold"
+          >
+            Retour au tableau de bord
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 py-10">
+      <div className="max-w-5xl mx-auto bg-white rounded shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-xs text-gray-500">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="underline hover:text-gray-700"
+            >
+              Tableau de bord
+            </button>{" "}
+            / <span className="font-semibold">Suivre un devis</span>
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-bold mb-2">Suivre un devis</h1>
+        <p className="text-sm text-gray-600 mb-4">
+          Retrouvez vos devis et choisissez de les valider ou de les refuser.
+        </p>
+
+        {/* Filtres */}
+        <div className="flex items-center gap-3 mb-4 text-sm">
+          <span className="text-gray-600">Filtrer par statut :</span>
+          <select
+            value={filtreStatut}
+            onChange={(e) =>
+              setFiltreStatut(e.target.value as any)
+            }
+            className="border rounded px-2 py-1 text-sm"
+          >
+            <option value="EN_COURS">En cours</option>
+            <option value="ACCEPTE">Validés</option>
+            <option value="REFUSE">Refusés</option>
+            <option value="TOUS">Tous</option>
+          </select>
+        </div>
+
+        {devisFiltres.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Aucun devis pour ce filtre.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="py-2 pr-4">Référence</th>
+                  <th className="py-2 pr-4">Date</th>
+                  <th className="py-2 pr-4">Statut</th>
+                  <th className="py-2 pr-4">Montant interne</th>
+                  <th className="py-2 pr-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {devisFiltres.map((d) => {
+                  const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/pdf`;
+                  return (
+                    <tr key={d.id} className="border-b">
+                      <td className="py-2 pr-4 font-semibold">
+                        #{d.numero_boutique}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {formatDate(d.date_creation)}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {formatStatut(d.statut)}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {d.prix_total.toFixed(2)} € HT
+                      </td>
+                      <td className="py-2 pr-4 flex flex-wrap gap-2">
+                        <a
+                          href={pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-3 py-1 rounded bg-gray-900 text-white"
+                        >
+                          PDF devis
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleValider(d.id)}
+                          disabled={d.statut !== "EN_COURS" || actionId === d.id}
+                          className="text-xs px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-60"
+                        >
+                          Valider
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRefuser(d.id)}
+                          disabled={d.statut !== "EN_COURS" || actionId === d.id}
+                          className="text-xs px-3 py-1 rounded border border-red-300 text-red-700 disabled:opacity-60"
+                        >
+                          Refuser
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

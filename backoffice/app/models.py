@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from sqlalchemy import (
     Column, Integer, String, DateTime, Float,
-    Enum as SAEnum, ForeignKey, Text, Boolean
+    Enum as SAEnum, ForeignKey, Text, Boolean, func
 )
 from sqlalchemy.orm import relationship
 
@@ -71,6 +71,21 @@ class Devis(Base):
     boutique = relationship("Boutique", back_populates="devis")
     lignes = relationship("LigneDevis", back_populates="devis", cascade="all, delete-orphan")
     mesures = relationship("DevisMesure", back_populates="devis", cascade="all, delete-orphan")
+    bon_commande = relationship("BonCommande", back_populates="devis", uselist=False)
+
+class BonCommande(Base):
+    __tablename__ = "bons_commandes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devis_id = Column(Integer, ForeignKey("devis.id"), unique=True, nullable=False)
+
+    date_creation = Column(DateTime, server_default=func.now(), nullable=False)
+
+    montant_boutique_ht = Column(Float, nullable=False)
+    montant_boutique_ttc = Column(Float, nullable=False)
+    has_tva = Column(Boolean, default=False, nullable=False)
+
+    devis = relationship("Devis", back_populates="bon_commande")
 
 
 class RobeModele(Base):
