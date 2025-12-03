@@ -29,7 +29,6 @@ export default function DevisMesuresPage() {
         const types = await apiFetch("/api/boutique/mesures/types");
         setMesureTypes(types);
 
-        // Optionnel : initialiser l'objet values
         const initial: Record<number, string> = {};
         for (const t of types) {
           initial[t.id] = "";
@@ -52,7 +51,6 @@ export default function DevisMesuresPage() {
     e.preventDefault();
     if (!id) return;
 
-    // contrôle des obligatoires
     const manquantes = mesureTypes.filter(
       (t) => t.obligatoire && (!values[t.id] || values[t.id].trim() === "")
     );
@@ -92,7 +90,7 @@ export default function DevisMesuresPage() {
         }),
       });
 
-      router.push(`/devis/${id}/confirmation`);
+      router.push(`/devis/${id}/commande`);
     } catch (e: any) {
       alert(e.message || "Erreur lors de l'enregistrement des mesures");
     } finally {

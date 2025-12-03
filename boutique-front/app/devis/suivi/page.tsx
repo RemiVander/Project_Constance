@@ -9,7 +9,9 @@ type Devis = {
   numero_boutique: number;
   statut: string;
   date_creation?: string | null;
-  prix_total: number;
+  prix_total: number;                 // base interne HT
+  prix_boutique: number;             // ce que Constance facture à la boutique (HT ou TTC selon TVA)
+  prix_client_conseille_ttc: number; // prix public conseillé TTC
 };
 
 export default function SuiviDevisPage() {
@@ -18,7 +20,9 @@ export default function SuiviDevisPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
-  const [filtreStatut, setFiltreStatut] = useState<"TOUS" | "EN_COURS" | "ACCEPTE" | "REFUSE">("EN_COURS");
+  const [filtreStatut, setFiltreStatut] = useState<
+    "TOUS" | "EN_COURS" | "ACCEPTE" | "REFUSE"
+  >("EN_COURS");
 
   useEffect(() => {
     async function load() {
@@ -49,6 +53,21 @@ export default function SuiviDevisPage() {
         return "Refusé";
       default:
         return statut;
+    }
+  }
+
+  function statutBadgeClass(statut: string) {
+    const base =
+      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ";
+    switch (statut) {
+      case "EN_COURS":
+        return base + "bg-amber-100 text-amber-800";
+      case "ACCEPTE":
+        return base + "bg-emerald-100 text-emerald-800";
+      case "REFUSE":
+        return base + "bg-rose-100 text-rose-700";
+      default:
+        return base + "bg-slate-100 text-slate-700";
     }
   }
 
@@ -130,7 +149,6 @@ export default function SuiviDevisPage() {
           Retrouvez vos devis et choisissez de les valider ou de les refuser.
         </p>
 
-        {/* Filtres */}
         <div className="flex items-center gap-3 mb-4 text-sm">
           <span className="text-gray-600">Filtrer par statut :</span>
           <select
@@ -160,12 +178,16 @@ export default function SuiviDevisPage() {
                   <th className="py-2 pr-4">Date</th>
                   <th className="py-2 pr-4">Statut</th>
                   <th className="py-2 pr-4">Montant interne</th>
+                  <th className="py-2 pr-4">Montant client</th>
                   <th className="py-2 pr-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {devisFiltres.map((d) => {
-                  const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/pdf`;
+                  const devisPdfUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/pdf`;
+                  const bonCommandeUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/bon-commande.pdf`;
+                  const isEnCours = d.statut === "EN_COURS";
+
                   return (
                     <tr key={d.id} className="border-b">
                       <td className="py-2 pr-4 font-semibold">
@@ -175,14 +197,19 @@ export default function SuiviDevisPage() {
                         {formatDate(d.date_creation)}
                       </td>
                       <td className="py-2 pr-4">
-                        {formatStatut(d.statut)}
+                        <span className={statutBadgeClass(d.statut)}>
+                          {formatStatut(d.statut)}
+                        </span>
                       </td>
                       <td className="py-2 pr-4">
-                        {d.prix_total.toFixed(2)} € HT
+                        {d.prix_boutique.toFixed(2)} €
+                      </td>
+                      <td className="py-2 pr-4">
+                        {d.prix_client_conseille_ttc.toFixed(2)} € TTC
                       </td>
                       <td className="py-2 pr-4 flex flex-wrap gap-2">
                         <a
-                          href={pdfUrl}
+                          href={devisPdfUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs px-3 py-1 rounded bg-gray-900 text-white"
@@ -190,23 +217,38 @@ export default function SuiviDevisPage() {
                           PDF devis
                         </a>
 
-                        <button
-                          type="button"
-                          onClick={() => handleValider(d.id)}
-                          disabled={d.statut !== "EN_COURS" || actionId === d.id}
-                          className="text-xs px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-60"
-                        >
-                          Valider
-                        </button>
+                        {d.statut === "ACCEPTE" && (
+                          <a
+                            href={bonCommandeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs px-3 py-1 rounded bg-emerald-700 text-white"
+                          >
+                            Bon de commande
+                          </a>
+                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => handleRefuser(d.id)}
-                          disabled={d.statut !== "EN_COURS" || actionId === d.id}
-                          className="text-xs px-3 py-1 rounded border border-red-300 text-red-700 disabled:opacity-60"
-                        >
-                          Refuser
-                        </button>
+                        {isEnCours && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleValider(d.id)}
+                              disabled={actionId === d.id}
+                              className="text-xs px-3 py-1 rounded bg-emerald-600 text-white disabled:opacity-60"
+                            >
+                              Valider
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRefuser(d.id)}
+                              disabled={actionId === d.id}
+                              className="text-xs px-3 py-1 rounded border border-rose-300 text-rose-700 disabled:opacity-60"
+                            >
+                              Refuser
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   );

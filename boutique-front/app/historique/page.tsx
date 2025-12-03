@@ -10,7 +10,9 @@ interface Devis {
   numero_boutique: number;
   statut: string;
   date_creation?: string | null;
-  prix_total: number;
+  prix_total: number;     
+  prix_boutique: number;           
+  prix_client_conseille_ttc: number; 
 }
 
 export default function HistoriqueDevisPage() {
@@ -22,12 +24,9 @@ export default function HistoriqueDevisPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = (await apiFetch(
-          "/api/boutique/devis"
-        )) as Devis[];
+        const data = (await apiFetch("/api/boutique/devis")) as Devis[];
         setDevis(data);
       } catch (err: any) {
-        // si non connecté → retour login
         if (err?.message?.includes("401")) {
           router.push("/login");
           return;
@@ -58,6 +57,21 @@ export default function HistoriqueDevisPage() {
         return "Refusé";
       default:
         return statut;
+    }
+  };
+
+  const statutBadgeClass = (statut: string) => {
+    const base =
+      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ";
+    switch (statut) {
+      case "EN_COURS":
+        return base + "bg-amber-100 text-amber-800";
+      case "ACCEPTE":
+        return base + "bg-emerald-100 text-emerald-800";
+      case "REFUSE":
+        return base + "bg-rose-100 text-rose-700";
+      default:
+        return base + "bg-slate-100 text-slate-700";
     }
   };
 
@@ -104,8 +118,8 @@ export default function HistoriqueDevisPage() {
           Mon historique de devis
         </h1>
         <p className="text-sm text-gray-600 mb-6">
-          Retrouvez l'ensemble de vos devis, avec leur statut et un lien
-          pour télécharger le PDF.
+          Retrouvez l'ensemble de vos devis, avec leur statut, les montants
+          interne et client, et un lien pour télécharger le PDF.
         </p>
 
         {devis.length === 0 ? (
@@ -120,7 +134,8 @@ export default function HistoriqueDevisPage() {
                   <th className="py-2 pr-4">Référence</th>
                   <th className="py-2 pr-4">Date</th>
                   <th className="py-2 pr-4">Statut</th>
-                  <th className="py-2 pr-4">Montant (base HT)</th>
+                  <th className="py-2 pr-4">Montant interne</th>
+                  <th className="py-2 pr-4">Montant client</th>
                   <th className="py-2 pr-4">Actions</th>
                 </tr>
               </thead>
@@ -136,17 +151,15 @@ export default function HistoriqueDevisPage() {
                         {formatDate(d.date_creation)}
                       </td>
                       <td className="py-2 pr-4">
-                        <span
-                          className="
-                            inline-flex items-center px-2 py-0.5 rounded-full text-xs
-                            border
-                          "
-                        >
+                        <span className={statutBadgeClass(d.statut)}>
                           {formatStatut(d.statut)}
                         </span>
                       </td>
                       <td className="py-2 pr-4">
-                        {d.prix_total.toFixed(2)} €
+                        {d.prix_boutique.toFixed(2)} €
+                      </td>
+                      <td className="py-2 pr-4">
+                        {d.prix_client_conseille_ttc.toFixed(2)} € TTC
                       </td>
                       <td className="py-2 pr-4 flex flex-wrap gap-2">
                         <a
@@ -157,7 +170,6 @@ export default function HistoriqueDevisPage() {
                         >
                           PDF devis
                         </a>
-                        {/* plus tard: bouton "Valider" / "Refuser" ici */}
                       </td>
                     </tr>
                   );

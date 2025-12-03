@@ -220,7 +220,7 @@ export default function NouveauDevisPage() {
           lignes: [
             {
               robe_modele_id: null,
-              description,
+              description : null,
               quantite: 1,
               prix_unitaire: prixBaseHt,
             },
@@ -228,8 +228,6 @@ export default function NouveauDevisPage() {
         }),
       })) as any;
 
-      // Redirection vers une page de confirmation,
-      // où l'on pourra télécharger les PDFs
       if (created && created.id) {
         router.push(`/devis/${created.id}/confirmation`);
       } else {
@@ -242,7 +240,6 @@ export default function NouveauDevisPage() {
     }
   }
 
-  // États de chargement / erreur
   if (loading) {
     return <p>Chargement des options...</p>;
   }
@@ -272,8 +269,8 @@ export default function NouveauDevisPage() {
       <Breadcrumb
         items={[
           { label: "Tableau de bord", href: "/dashboard" },
-          { label: "Devis", href: "/historique" }, // ou autre route que tu préfères
-          { label: "Nouveau devis" }, // étape courante non cliquable
+          { label: "Devis", href: "/historique" },
+          { label: "Nouveau devis" },
         ]}
       />
 
