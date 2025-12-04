@@ -35,9 +35,14 @@ def admin_login(
     mot_de_passe: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter_by(email=email, type=models.UserType.ADMIN).first()
+    user = (
+        db.query(models.User)
+        .filter_by(email=email, type=models.UserType.ADMIN)
+        .first()
+    )
+
     if not user or not verify_password(mot_de_passe, user.mot_de_passe):
-        raise HTTPException(status_code=400, detail="Identifiants invalides")
+        return RedirectResponse(url="/admin/login?error=1", status_code=302)
 
     request.session["admin_id"] = user.id
     return RedirectResponse(url="/admin/dashboard", status_code=302)

@@ -27,7 +27,18 @@ def get_db():
 
 @router.get("/admin/login")
 def login_page(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    error = None
+    if request.query_params.get("error") == "1":
+        error = "Identifiants invalides"
+
+    return templates.TemplateResponse(
+        "admin_login.html",
+        {
+            "request": request,
+            "error": error,
+        },
+    )
+
 
 
 @router.get("/admin/dashboard")
