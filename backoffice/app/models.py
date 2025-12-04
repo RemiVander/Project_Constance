@@ -158,6 +158,7 @@ class FinitionSupplementaire(Base):
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String, nullable=False)
     prix = Column(Float, default=0.0, nullable=False)
+    est_fente = Column(Boolean, default=False)
 
 
 class Accessoire(Base):
