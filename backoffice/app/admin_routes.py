@@ -549,10 +549,11 @@ def create_finition_supp(
     request: Request,
     nom: str = Form(...),
     prix: float = Form(0.0),
+    est_fente: bool = Form(False),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    f = models.FinitionSupplementaire(nom=nom, prix=prix)
+    f = models.FinitionSupplementaire(nom=nom, prix=prix, est_fente=est_fente)
     db.add(f)
     db.commit()
     return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
@@ -564,6 +565,7 @@ def update_finition_supp(
     request: Request,
     nom: str = Form(...),
     prix: float = Form(0.0),
+    est_fente: bool = Form(False),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -572,8 +574,10 @@ def update_finition_supp(
         return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
     f.nom = nom
     f.prix = prix
+    f.est_fente = est_fente
     db.commit()
     return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
+
 
 
 @router.post("/admin/finitions_supplementaires/{finition_id}/delete")

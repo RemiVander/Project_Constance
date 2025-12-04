@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Breadcrumb } from "@/components/Breadcrumb";
 
-
 type RobeModele = {
   id: number;
   nom: string;
@@ -36,6 +35,7 @@ type FinitionSupp = {
   id: number;
   nom: string;
   prix: number;
+  est_fente: boolean; // NOUVEAU
 };
 
 type Accessoire = {
@@ -59,7 +59,7 @@ export default function NouveauDevisPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // IDs des transformations choisies
+  // Transformations
   const [decDevantId, setDecDevantId] = useState<number | null>(null);
   const [decDosId, setDecDosId] = useState<number | null>(null);
   const [decoupeDevantId, setDecoupeDevantId] = useState<number | null>(null);
@@ -67,28 +67,28 @@ export default function NouveauDevisPage() {
   const [manchesId, setManchesId] = useState<number | null>(null);
   const [basId, setBasId] = useState<number | null>(null);
 
-  // tissus
+  // Tissus
   const [tissuDevantId, setTissuDevantId] = useState<number | null>(null);
   const [tissuDosId, setTissuDosId] = useState<number | null>(null);
   const [tissuManchesId, setTissuManchesId] = useState<number | null>(null);
   const [tissuBasId, setTissuBasId] = useState<number | null>(null);
   const [tissuCeintureId, setTissuCeintureId] = useState<number | null>(null);
 
-  // finitions + accessoires
+  // Finitions + accessoires
   const [finitionsIds, setFinitionsIds] = useState<number[]>([]);
   const [accessoiresIds, setAccessoiresIds] = useState<number[]>([]);
 
+  // Ceinture
   const [avecCeinture, setAvecCeinture] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Load options
   useEffect(() => {
     async function load() {
       try {
-        const data = (await apiFetch(
-          "/api/boutique/options",
-        )) as OptionsResponse;
+        const data = (await apiFetch("/api/boutique/options")) as OptionsResponse;
         setOptions(data);
       } catch (err: any) {
         if (err.message?.includes("401")) {
@@ -103,86 +103,63 @@ export default function NouveauDevisPage() {
     load();
   }, [router]);
 
-  function getRobeNom(robeId: number | null): string {
-    if (!options || robeId == null) return "";
-    const robe = options.robe_modeles.find((r) => r.id === robeId);
-    return robe ? robe.nom : "";
+  function filterTransfos(cat: string) {
+    return options?.tarifs_transformations.filter((t) => t.categorie === cat) ?? [];
   }
-
-  function filterTransfos(categorie: string): TransformationTarif[] {
-    if (!options) return [];
-    return options.tarifs_transformations.filter(
-      (t) => t.categorie === categorie,
-    );
+  function filterTissus(cat: string) {
+    return options?.tarifs_tissus.filter((t) => t.categorie === cat) ?? [];
   }
-
-  function filterTissus(categorie: string): TissuTarif[] {
-    if (!options) return [];
-    return options.tarifs_tissus.filter((t) => t.categorie === categorie);
+  function getTransfoById(id: number | null) {
+    return options?.tarifs_transformations.find((t) => t.id === id) ?? null;
   }
-
-  function getTransfoById(id: number | null): TransformationTarif | null {
-    if (!options || id == null) return null;
-    return options.tarifs_transformations.find((t) => t.id === id) ?? null;
+  function getTissuById(id: number | null) {
+    return options?.tarifs_tissus.find((t) => t.id === id) ?? null;
   }
+  const hasManches = !!manchesId;
 
-  function getTissuById(id: number | null): TissuTarif | null {
-    if (!options || id == null) return null;
-    return options.tarifs_tissus.find((t) => t.id === id) ?? null;
-  }
-
-  function isCeinturePossible(): boolean {
-    const decoupeDevant = getTransfoById(decoupeDevantId);
-    if (!decoupeDevant) return false;
-    return !!decoupeDevant.ceinture_possible;
-  }
-
+  // Double décolleté
   const doubleDecolleteAlerte = useMemo(() => {
     const dev = getTransfoById(decDevantId);
     const dos = getTransfoById(decDosId);
-    if (!dev || !dos) return false;
-    return dev.est_decollete && dos.est_decollete;
+    return dev?.est_decollete && dos?.est_decollete;
   }, [decDevantId, decDosId, options]);
 
+  // Prix
   const prixBaseHt = useMemo(() => {
     if (!options) return 0;
     let total = 0;
-
-    const addTransfo = (id: number | null) => {
+    const addT = (id: number | null) => {
       const t = getTransfoById(id);
       if (t) total += t.prix;
     };
-
-    const addTissu = (id: number | null) => {
+    const addTi = (id: number | null) => {
       const t = getTissuById(id);
       if (t) total += t.prix;
     };
 
-    addTransfo(decDevantId);
-    addTransfo(decDosId);
-    addTransfo(decoupeDevantId);
-    addTransfo(decoupeDosId);
-    addTransfo(manchesId);
-    addTransfo(basId);
+    addT(decDevantId);
+    addT(decDosId);
+    addT(decoupeDevantId);
+    addT(decoupeDosId);
+    addT(manchesId);
+    addT(basId);
 
-    addTissu(tissuDevantId);
-    addTissu(tissuDosId);
-    addTissu(tissuManchesId);
-    addTissu(tissuBasId);
-    if (avecCeinture && tissuCeintureId) {
-      addTissu(tissuCeintureId);
-    }
+    addTi(tissuDevantId);
+    addTi(tissuDosId);
+    addTi(tissuManchesId);
+    addTi(tissuBasId);
+    if (avecCeinture) addTi(tissuCeintureId);
 
-    for (const finId of finitionsIds) {
-      const f = options.finitions_supplementaires.find((f) => f.id === finId);
+    for (const id of finitionsIds) {
+      const f = options.finitions_supplementaires.find((x) => x.id === id);
       if (f) total += f.prix;
     }
-    for (const accId of accessoiresIds) {
-      const a = options.accessoires.find((a) => a.id === accId);
+    for (const id of accessoiresIds) {
+      const a = options.accessoires.find((x) => x.id === id);
       if (a) total += a.prix;
     }
 
-    return total; 
+    return total;
   }, [
     options,
     decDevantId,
@@ -204,80 +181,55 @@ export default function NouveauDevisPage() {
   async function handleSubmit() {
     setSaveError(null);
 
+    if (!options) return setSaveError("Options non chargées.");
+
+    // VALIDATION
+    const errors: string[] = [];
+    if (!tissuDevantId) errors.push("Le tissu devant est obligatoire.");
+    if (!tissuBasId) errors.push("Le tissu bas est obligatoire.");
+    if (hasManches && !tissuManchesId)
+      errors.push("Le tissu manches est obligatoire si des manches sont choisies.");
+
+    if (errors.length > 0) {
+      setSaveError(errors.join(" "));
+      return;
+    }
+
     if (prixBaseHt <= 0) {
-      setSaveError("Le devis est vide ou incomplet.");
-      return;
+      return setSaveError("Le devis est vide ou incomplet.");
     }
 
-    if (!options) {
-      setSaveError("Les options n'ont pas été chargées.");
-      return;
-    }
-
-    // --- Construction de la description détaillée ---
+    // Description
     const parts: string[] = [];
-
-    const addTransfo = (label: string, id: number | null) => {
+    const addT = (label: string, id: number | null) => {
       if (!id) return;
-      const t = options.tarifs_transformations.find((tr) => tr.id === id);
+      const t = getTransfoById(id);
       if (!t) return;
       const extra = t.epaisseur_ou_option ? ` – ${t.epaisseur_ou_option}` : "";
-      parts.push(`${label} : ${t.finition}${extra}`);
+      parts.push(`${label}: ${t.finition}${extra}`);
     };
-
-    const addTissu = (label: string, id: number | null) => {
+    const addTi = (label: string, id: number | null) => {
       if (!id) return;
-      const t = options.tarifs_tissus.find((ti) => ti.id === id);
+      const t = getTissuById(id);
       if (!t) return;
-      const detail = t.detail ? ` – ${t.detail}` : "";
-      parts.push(`${label} : ${t.categorie}${detail}`);
+      parts.push(`${label}: ${t.categorie} – ${t.detail}`);
     };
 
-    // Transformations
-    addTransfo("Décolleté devant", decDevantId);
-    addTransfo("Décolleté dos", decDosId);
-    addTransfo("Découpe devant", decoupeDevantId);
-    addTransfo("Découpe dos", decoupeDosId);
-    addTransfo("Manches", manchesId);
-    addTransfo("Bas de robe", basId);
+    addT("Décolleté devant", decDevantId);
+    addT("Décolleté dos", decDosId);
+    addT("Découpe devant", decoupeDevantId);
+    addT("Découpe dos", decoupeDosId);
+    addT("Manches", manchesId);
+    addT("Bas de robe", basId);
 
-    // Tissus
-    addTissu("Tissu devant", tissuDevantId);
-    addTissu("Tissu dos", tissuDosId);
-    addTissu("Tissu manches", tissuManchesId);
-    addTissu("Tissu bas", tissuBasId);
-    if (avecCeinture && tissuCeintureId) {
-      addTissu("Ceinture", tissuCeintureId);
-    }
-
-    // Finitions supplémentaires
-    if (finitionsIds.length > 0) {
-      const noms = finitionsIds
-        .map((id) =>
-          options.finitions_supplementaires.find((f) => f.id === id)?.nom,
-        )
-        .filter(Boolean);
-      if (noms.length > 0) {
-        parts.push(`Finitions : ${noms.join(", ")}`);
-      }
-    }
-
-    // Accessoires
-    if (accessoiresIds.length > 0) {
-      const noms = accessoiresIds
-        .map((id) =>
-          options.accessoires.find((a) => a.id === id)?.nom,
-        )
-        .filter(Boolean);
-      if (noms.length > 0) {
-        parts.push(`Accessoires : ${noms.join(", ")}`);
-      }
-    }
+    addTi("Tissu devant", tissuDevantId);
+    addTi("Tissu dos", tissuDosId);
+    addTi("Tissu manches", tissuManchesId);
+    addTi("Tissu bas", tissuBasId);
+    if (avecCeinture) addTi("Tissu ceinture", tissuCeintureId);
 
     const description =
-      parts.length > 0
-        ? parts.join(" | ")
-        : "Robe de mariée sur-mesure";
+      parts.length > 0 ? parts.join(" | ") : "Robe de mariée sur mesure";
 
     setSaving(true);
     try {
@@ -295,42 +247,23 @@ export default function NouveauDevisPage() {
         }),
       })) as any;
 
-      if (created && created.id) {
-        router.push(`/devis/${created.id}/confirmation`);
-      } else {
-        router.push("/dashboard");
-      }
+      if (created?.id) router.push(`/devis/${created.id}/confirmation`);
+      else router.push("/dashboard");
     } catch (err: any) {
-      setSaveError(err.message || "Erreur lors de la création du devis");
+      setSaveError(err.message || "Erreur création devis");
     } finally {
       setSaving(false);
     }
   }
 
-
-  if (loading) {
-    return <p>Chargement des options...</p>;
-  }
-
-  if (!options) {
+  if (loading) return <p>Chargement…</p>;
+  if (!options)
     return (
-      <div className="space-y-2">
-        <p className="text-red-600 text-sm">
-          Impossible de charger les options de création de devis.
-        </p>
-        {loadError && (
-          <p className="text-xs text-gray-500">Détail : {loadError}</p>
-        )}
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="inline-flex text-sm text-blue-600 underline"
-        >
-          Réessayer
-        </button>
+      <div>
+        <p className="text-red-600">Impossible de charger les options.</p>
+        {loadError && <p className="text-xs">{loadError}</p>}
       </div>
     );
-  }
 
   return (
     <div className="space-y-6">
@@ -342,58 +275,47 @@ export default function NouveauDevisPage() {
         ]}
       />
 
+      <h1 className="text-2xl font-bold">Créer un devis</h1>
 
-      <h1 className="text-2xl font-bold mb-2">Créer un devis</h1>
-
-      {loadError && (
-        <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">
-          Attention : {loadError}
-        </div>
+      {saveError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 p-2 rounded">
+          {saveError}
+        </p>
       )}
 
-      {/* Devant / Dos */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* DEVANT */}
-        <div className="bg-white border rounded-xl p-4">
+        <div className="border rounded-xl p-4 bg-white">
           <h2 className="font-semibold mb-3">Devant</h2>
 
-          {/* Décolleté devant */}
+          {/* Décolleté */}
           <div className="mb-3">
             <label className="block text-sm font-medium mb-1">
               Décolleté devant
             </label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={decDevantId ?? ""}
               onChange={(e) =>
                 setDecDevantId(e.target.value ? Number(e.target.value) : null)
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté devant").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Décolleté devant").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Découpe devant */}
+          {/* Découpe */}
           <div className="mb-3">
             <label className="block text-sm font-medium mb-1">
               Découpe devant
             </label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={decoupeDevantId ?? ""}
               onChange={(e) =>
                 setDecoupeDevantId(
@@ -402,20 +324,11 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe devant").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Découpe devant").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -423,27 +336,18 @@ export default function NouveauDevisPage() {
           <div className="mb-3">
             <label className="block text-sm font-medium mb-1">Manches</label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={manchesId ?? ""}
               onChange={(e) =>
                 setManchesId(e.target.value ? Number(e.target.value) : null)
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Manches").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Manches").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -451,38 +355,30 @@ export default function NouveauDevisPage() {
           <div className="mb-3">
             <label className="block text-sm font-medium mb-1">Bas</label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={basId ?? ""}
               onChange={(e) =>
                 setBasId(e.target.value ? Number(e.target.value) : null)
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Bas").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Bas").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Tissus devant / manches / bas */}
-          <div className="grid md:grid-cols-2 gap-3 mt-4">
+          {/* TISSUS EN LIGNES */}
+          <div className="space-y-3 mt-4">
+            {/* TISSU DEVANT */}
             <div>
               <label className="block text-sm font-medium mb-1">
                 Tissu devant
               </label>
               <select
-                className="border rounded px-3 py-2 text-sm w-full"
+                className="w-full border rounded px-3 py-2 text-sm"
                 value={tissuDevantId ?? ""}
                 onChange={(e) =>
                   setTissuDevantId(
@@ -499,34 +395,38 @@ export default function NouveauDevisPage() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Tissu manches
-              </label>
-              <select
-                className="border rounded px-3 py-2 text-sm w-full"
-                value={tissuManchesId ?? ""}
-                onChange={(e) =>
-                  setTissuManchesId(
-                    e.target.value ? Number(e.target.value) : null,
-                  )
-                }
-              >
-                <option value="">Aucun</option>
-                {filterTissus("Manches").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.detail}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* TISSU MANCHES SI MANCHES */}
+            {hasManches && (
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Tissu manches
+                </label>
+                <select
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={tissuManchesId ?? ""}
+                  onChange={(e) =>
+                    setTissuManchesId(
+                      e.target.value ? Number(e.target.value) : null,
+                    )
+                  }
+                >
+                  <option value="">Aucun</option>
+                  {filterTissus("Manches").map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.detail}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
+            {/* TISSU BAS */}
             <div>
               <label className="block text-sm font-medium mb-1">
                 Tissu bas
               </label>
               <select
-                className="border rounded px-3 py-2 text-sm w-full"
+                className="w-full border rounded px-3 py-2 text-sm"
                 value={tissuBasId ?? ""}
                 onChange={(e) =>
                   setTissuBasId(
@@ -545,46 +445,52 @@ export default function NouveauDevisPage() {
             </div>
           </div>
 
-          {/* Ceinture */}
-          {isCeinturePossible() && (
-            <div className="mt-4">
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={avecCeinture}
-                  onChange={(e) => setAvecCeinture(e.target.checked)}
-                />
-                <span>Ajouter une ceinture</span>
-              </label>
-              {avecCeinture && (
-                <div className="mt-2">
-                  <label className="block text-xs font-medium mb-1">
-                    Tissu ceinture
-                  </label>
-                  <select
-                    className="border rounded px-3 py-2 text-sm w-full"
-                    value={tissuCeintureId ?? ""}
-                    onChange={(e) =>
-                      setTissuCeintureId(
-                        e.target.value ? Number(e.target.value) : null,
-                      )
-                    }
-                  >
-                    <option value="">Aucun</option>
-                    {filterTissus("Ceinture").map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.detail}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          )}
+          {/* CEINTURE */}
+          {(() => {
+            const dec = getTransfoById(decoupeDevantId);
+            if (!dec?.ceinture_possible) return null;
+
+            return (
+              <div className="mt-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={avecCeinture}
+                    onChange={(e) => setAvecCeinture(e.target.checked)}
+                  />
+                  Ajouter une ceinture
+                </label>
+
+                {avecCeinture && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium mb-1">
+                      Tissu ceinture
+                    </label>
+                    <select
+                      className="w-full border rounded px-3 py-2 text-sm"
+                      value={tissuCeintureId ?? ""}
+                      onChange={(e) =>
+                        setTissuCeintureId(
+                          e.target.value ? Number(e.target.value) : null,
+                        )
+                      }
+                    >
+                      <option value="">Aucun</option>
+                      {filterTissus("Ceinture").map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.detail}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* DOS */}
-        <div className="bg-white border rounded-xl p-4">
+        <div className="border rounded-xl p-4 bg-white">
           <h2 className="font-semibold mb-3">Dos</h2>
 
           {/* Décolleté dos */}
@@ -593,27 +499,18 @@ export default function NouveauDevisPage() {
               Décolleté dos
             </label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={decDosId ?? ""}
               onChange={(e) =>
                 setDecDosId(e.target.value ? Number(e.target.value) : null)
               }
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté dos").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Décolleté dos").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -623,7 +520,7 @@ export default function NouveauDevisPage() {
               Découpe dos
             </label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={decoupeDosId ?? ""}
               onChange={(e) =>
                 setDecoupeDosId(
@@ -632,20 +529,11 @@ export default function NouveauDevisPage() {
               }
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe dos").map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const baseLabel = t.epaisseur_ou_option
-                  ? `${t.finition} – ${t.epaisseur_ou_option}`
-                  : t.finition;
-                const label = robeNom
-                  ? `[${robeNom}] ${baseLabel}`
-                  : baseLabel;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {filterTransfos("Découpe dos").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.finition}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -655,7 +543,7 @@ export default function NouveauDevisPage() {
               Tissu dos
             </label>
             <select
-              className="border rounded px-3 py-2 text-sm w-full"
+              className="w-full border rounded px-3 py-2 text-sm"
               value={tissuDosId ?? ""}
               onChange={(e) =>
                 setTissuDosId(
@@ -672,12 +560,13 @@ export default function NouveauDevisPage() {
             </select>
           </div>
 
-          {/* Finitions supplémentaires */}
+          {/* FINITIONS SUPPLÉMENTAIRES */}
           <div className="mt-4">
             <label className="block text-sm font-medium mb-1">
               Finitions supplémentaires
             </label>
-            <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
+
+            <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
               {options.finitions_supplementaires.map((f) => (
                 <label key={f.id} className="flex items-center gap-2 text-sm">
                   <input
@@ -685,7 +574,22 @@ export default function NouveauDevisPage() {
                     checked={finitionsIds.includes(f.id)}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setFinitionsIds([...finitionsIds, f.id]);
+                        let newList = [...finitionsIds, f.id];
+
+                        // EXCLUSION AUTOMATIQUE DES AUTRES FENTES
+                        if (f.est_fente) {
+                          const autres = options.finitions_supplementaires
+                            .filter(
+                              (x) => x.est_fente && x.id !== f.id,
+                            )
+                            .map((x) => x.id);
+
+                          newList = newList.filter(
+                            (id) => !autres.includes(id),
+                          );
+                        }
+
+                        setFinitionsIds(newList);
                       } else {
                         setFinitionsIds(
                           finitionsIds.filter((id) => id !== f.id),
@@ -699,25 +603,22 @@ export default function NouveauDevisPage() {
             </div>
           </div>
 
-          {/* Accessoires */}
+          {/* ACCESSOIRES */}
           <div className="mt-4">
-            <label className="block text-sm font-medium mb-1">
-              Accessoires
-            </label>
-            <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
+            <label className="block text-sm font-medium mb-1">Accessoires</label>
+            <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
               {options.accessoires.map((a) => (
                 <label key={a.id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={accessoiresIds.includes(a.id)}
                     onChange={(e) => {
-                      if (e.target.checked) {
+                      if (e.target.checked)
                         setAccessoiresIds([...accessoiresIds, a.id]);
-                      } else {
+                      else
                         setAccessoiresIds(
                           accessoiresIds.filter((id) => id !== a.id),
                         );
-                      }
                     }}
                   />
                   <span>{a.nom}</span>
@@ -730,24 +631,24 @@ export default function NouveauDevisPage() {
 
       {/* Alerte double décolleté */}
       {doubleDecolleteAlerte && (
-        <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-          Attention : vous avez un décolleté devant et un décolleté dos. Cette
-          combinaison n&apos;est pas recommandée.
+        <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">
+          Attention : décolleté devant + décolleté dos est déconseillé.
         </div>
       )}
 
-      {/* Zone validation avec bouton centré */}
-      <div className="bg-white border rounded-xl p-6 flex flex-col items-center gap-2">
+      {/* VALIDATION */}
+      <div className="border rounded-xl p-6 bg-white flex flex-col items-center gap-2">
         {saveError && (
           <p className="text-xs text-red-600 text-center">{saveError}</p>
         )}
+
         <button
           type="button"
-          disabled={saving || prixBaseHt <= 0}
+          disabled={saving}
           onClick={handleSubmit}
           className="mt-2 inline-flex justify-center bg-gray-900 text-white text-sm font-semibold px-6 py-2 rounded-full disabled:opacity-50"
         >
-          {saving ? "Création du devis..." : "Créer le devis"}
+          {saving ? "Création du devis…" : "Créer le devis"}
         </button>
       </div>
     </div>

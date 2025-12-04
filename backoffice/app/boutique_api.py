@@ -397,7 +397,7 @@ def get_options(
             for t in tissus
         ],
         "finitions_supplementaires": [
-            {"id": f.id, "nom": f.nom, "prix": f.prix}
+            {"id": f.id, "nom": f.nom, "prix": f.prix, "est_fente": f.est_fente}
             for f in finitions
         ],
         "accessoires": [

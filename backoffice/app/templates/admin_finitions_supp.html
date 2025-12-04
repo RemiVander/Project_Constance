@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% block title %}Finitions supplémentaires{% endblock %}
 {% block content %}
@@ -29,19 +28,28 @@
         <tr>
             <th class="px-4 py-2 text-left">Nom</th>
             <th class="px-4 py-2 text-left">Prix</th>
-            <th class="px-4 py-2"></th>
+            <th class="px-4 py-2 text-center">Fente ?</th>
+            <th class="px-4 py-2 text-right"></th>
         </tr>
         </thead>
         <tbody>
         {% for f in finitions %}
             <tr class="border-t">
-                <form action="/admin/finitions_supplementaires/{{ f.id }}/update" method="post">
+                <form action="/admin/finitions_supplementaires/{{ f.id }}/update" method="post" class="contents">
                     <td class="px-4 py-2">
                         <input type="text" name="nom" value="{{ f.nom }}" class="w-full border rounded px-2 py-1">
                     </td>
+
                     <td class="px-4 py-2">
                         <input type="number" name="prix" step="0.01" value="{{ f.prix }}" class="w-full border rounded px-2 py-1">
                     </td>
+
+                    <td class="px-4 py-2 text-center">
+                        <input type="checkbox" name="est_fente"
+                               class="h-4 w-4"
+                               {% if f.est_fente %}checked{% endif %}>
+                    </td>
+
                     <td class="px-4 py-2 text-right">
                         <button type="submit" class="text-blue-600 mr-2">Sauver</button>
                 </form>
