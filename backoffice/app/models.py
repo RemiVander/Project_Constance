@@ -73,6 +73,14 @@ class Devis(Base):
     mesures = relationship("DevisMesure", back_populates="devis", cascade="all, delete-orphan")
     bon_commande = relationship("BonCommande", back_populates="devis", uselist=False)
 
+
+class StatutBonCommande(str, Enum):
+    EN_ATTENTE_VALIDATION = "EN_ATTENTE_VALIDATION"
+    A_MODIFIER = "A_MODIFIER"
+    VALIDE = "VALIDE"
+    REFUSE = "REFUSE"
+    
+
 class BonCommande(Base):
     __tablename__ = "bons_commandes"
 
@@ -84,6 +92,13 @@ class BonCommande(Base):
     montant_boutique_ht = Column(Float, nullable=False)
     montant_boutique_ttc = Column(Float, nullable=False)
     has_tva = Column(Boolean, default=False, nullable=False)
+
+    statut = Column(
+        SAEnum(StatutBonCommande),
+        default=StatutBonCommande.EN_ATTENTE_VALIDATION,
+        nullable=False,
+    )
+    commentaire_admin = Column(Text, nullable=True)
 
     devis = relationship("Devis", back_populates="bon_commande")
 

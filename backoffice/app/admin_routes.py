@@ -795,3 +795,46 @@ def admin_mesure_delete(
         db.delete(m)
         db.commit()
     return RedirectResponse(url="/admin/produits/mesures", status_code=303)
+
+
+@router.post("/admin/bons-commandes/{bon_commande_id}/statut")
+def bon_commande_change_statut(
+    bon_commande_id: int,
+    request: Request,
+    statut: str = Form(...),
+    commentaire_admin: str = Form(""),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    bc = db.query(models.BonCommande).get(bon_commande_id)
+    if not bc or not bc.devis or not bc.devis.boutique_id:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    try:
+        bc.statut = models.StatutBonCommande(statut)
+    except ValueError:
+        return RedirectResponse(
+            url=f"/admin/boutiques/{bc.devis.boutique_id}",
+            status_code=302,
+        )
+
+    # commentaire admin (obligatoire pour A_MODIFIER et REFUSE)
+    statut_requiert_commentaire = {
+        models.StatutBonCommande.A_MODIFIER,
+        models.StatutBonCommande.REFUSE,
+    }
+    if bc.statut in statut_requiert_commentaire and not commentaire_admin.strip():
+        # on ne valide pas sans commentaire
+        return RedirectResponse(
+            url=f"/admin/boutiques/{bc.devis.boutique_id}?error=commentaire_obligatoire",
+            status_code=302,
+        )
+
+    if commentaire_admin.strip():
+        bc.commentaire_admin = commentaire_admin.strip()
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/boutiques/{bc.devis.boutique_id}",
+        status_code=302,
+    )
