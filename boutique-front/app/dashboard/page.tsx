@@ -57,6 +57,15 @@ export default function Dashboard() {
             Vos devis passés et confirmés.
           </p>
         </button>
+        <button
+            onClick={() => router.push("/bons-commande")}
+            className="bg-white border rounded-xl p-4 shadow hover:shadow-md"
+          >
+            <h2 className="font-semibold">Mes bons de commande</h2>
+            <p className="text-sm text-gray-500">
+              Suivi des bons de commande et de leur validation.
+            </p>
+          </button>
       </div>
     </div>
   );

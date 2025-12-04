@@ -164,6 +164,8 @@ class BonCommandePublic(BaseModel):
     montant_boutique_ht: float
     montant_boutique_ttc: float
     has_tva: bool
+    statut: str
+    commentaire_admin: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -573,6 +575,8 @@ def update_devis_statut(
             bc.montant_boutique_ht = montant_boutique_ht
             bc.montant_boutique_ttc = montant_boutique_ttc
             bc.has_tva = has_tva
+            if bc.statut == models.StatutBonCommande.A_MODIFIER:
+                bc.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
         else:
             bc = models.BonCommande(
                 devis=devis,
@@ -622,6 +626,8 @@ def list_bons_commande(
                 montant_boutique_ht=bc.montant_boutique_ht,
                 montant_boutique_ttc=bc.montant_boutique_ttc,
                 has_tva=bc.has_tva,
+                statut=bc.statut.value if hasattr(bc.statut, "value") else str(bc.statut),
+                commentaire_admin=bc.commentaire_admin,
             )
         )
     return result
