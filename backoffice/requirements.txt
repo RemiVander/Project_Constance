@@ -7,4 +7,6 @@ python-multipart
 passlib
 itsdangerous
 reportlab
+email-validator
+
 

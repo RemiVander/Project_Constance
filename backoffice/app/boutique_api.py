@@ -15,6 +15,8 @@ from fastapi.responses import StreamingResponse
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from io import BytesIO
+import textwrap
+
 
 router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
 
@@ -624,6 +626,188 @@ def list_bons_commande(
         )
     return result
 
+@router.get("/devis/{devis_id}/bon-commande.pdf")
+def get_bon_commande_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
+        )
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    if devis.statut != models.StatutDevis.ACCEPTE:
+        raise HTTPException(
+            status_code=400,
+            detail="Le bon de commande n'est disponible que pour les devis acceptés.",
+        )
+
+    prix = compute_prix_boutique_et_client(devis)
+    has_tva = bool(boutique.numero_tva)
+
+    partenaire_ht = prix["partenaire_ht"]
+    partenaire_tva = prix["partenaire_tva"]
+    partenaire_ttc = prix["partenaire_ttc"]
+    client_ht = prix["client_ht"]
+    client_tva = prix["client_tva"]
+    client_ttc = prix["client_ttc"]
+
+    montant_a_payer = partenaire_ht if has_tva else partenaire_ttc
+    label_montant = (
+        "Montant à payer par la boutique (HT)"
+        if has_tva
+        else "Montant à payer par la boutique (TTC)"
+    )
+
+    # Récupération des lignes pour le détail de la création
+    lignes = (
+        db.query(models.LigneDevis)
+        .filter(models.LigneDevis.devis_id == devis.id)
+        .all()
+    )
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 50
+
+    # Titre
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y, "Bon de commande")
+    y -= 24
+
+    # Infos boutique + devis
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, f"Boutique : {boutique.nom}")
+    y -= 14
+    if boutique.adresse:
+        c.drawString(50, y, f"Adresse : {boutique.adresse}")
+        y -= 14
+    if boutique.telephone:
+        c.drawString(50, y, f"Téléphone : {boutique.telephone}")
+        y -= 14
+    if boutique.email:
+        c.drawString(50, y, f"Email : {boutique.email}")
+        y -= 14
+    if boutique.numero_tva:
+        c.drawString(50, y, f"N° TVA : {boutique.numero_tva}")
+        y -= 14
+
+    if devis.date_creation:
+        c.drawString(50, y, f"Date du devis : {devis.date_creation.strftime('%d/%m/%Y')}")
+        y -= 14
+
+    c.drawString(50, y, f"Référence devis : #{devis.numero_boutique}")
+    y -= 24
+
+    # Récap montants boutique
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Récapitulatif des montants (boutique) :")
+    y -= 18
+
+    c.setFont("Helvetica", 10)
+    c.drawString(60, y, "Montant HT :")
+    c.drawRightString(540, y, f"{partenaire_ht:.2f} €")
+    y -= 14
+
+    c.drawString(60, y, "TVA (20 %) :")
+    c.drawRightString(540, y, f"{partenaire_tva:.2f} €")
+    y -= 14
+
+    c.drawString(60, y, "Montant TTC :")
+    c.drawRightString(540, y, f"{partenaire_ttc:.2f} €")
+    y -= 18
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(60, y, label_montant + " :")
+    c.drawRightString(540, y, f"{montant_a_payer:.2f} €")
+    y -= 24
+
+    # Prix client conseillé
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Prix client conseillé :")
+    y -= 18
+
+    c.setFont("Helvetica", 10)
+    c.drawString(60, y, "Montant HT conseillé au client :")
+    c.drawRightString(540, y, f"{client_ht:.2f} €")
+    y -= 14
+
+    c.drawString(60, y, "TVA (20 %) sur prix client :")
+    c.drawRightString(540, y, f"{client_tva:.2f} €")
+    y -= 14
+
+    c.drawString(60, y, "Montant TTC conseillé au client :")
+    c.drawRightString(540, y, f"{client_ttc:.2f} €")
+    y -= 24
+
+    # DÉTAIL DE LA CRÉATION
+    if lignes:
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(50, y, "Détail de la création")
+        y -= 18
+
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(50, y, "Description")
+        c.drawRightString(540, y, "Qté")
+        y -= 12
+        c.line(50, y, width - 50, y)
+        y -= 14
+
+        c.setFont("Helvetica", 10)
+        for ligne in lignes:
+            desc = ligne.description or "Robe de mariée sur-mesure"
+            quantite = ligne.quantite or 1
+
+            wrapped_lines = textwrap.wrap(desc, width=95)
+
+            for i, line in enumerate(wrapped_lines):
+                if y < 80:
+                    c.showPage()
+                    y = height - 50
+                    c.setFont("Helvetica", 10)
+
+                c.drawString(50, y, line)
+                if i == 0:
+                    c.drawRightString(540, y, str(quantite))
+                y -= 16
+
+        y -= 16
+
+    # MESURES
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(50, y, "Mesures :")
+    y -= 18
+    c.setFont("Helvetica", 10)
+
+    for dm in devis.mesures:
+        label = dm.mesure_type.label if dm.mesure_type else f"Mesure #{dm.mesure_type_id}"
+        c.drawString(60, y, f"- {label} : {dm.valeur:.1f} cm")
+        y -= 14
+        if y < 80:
+            c.showPage()
+            y = height - 50
+            c.setFont("Helvetica", 10)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="bon_commande_devis_{devis.id}.pdf"'
+        },
+    )
+
 
 # =========================
 # PDF DEVIS
@@ -742,25 +926,30 @@ def get_devis_pdf(
 
     c.setFont("Helvetica-Bold", 10)
     c.drawString(50, y, "Description")
-    c.drawString(305, y, "Qté")
+    c.drawRightString(540, y, "Qté")
     y -= 12
     c.line(50, y, width - 50, y)
     y -= 14
 
     c.setFont("Helvetica", 10)
     for ligne in lignes:
-        if y < 100:
-            c.showPage()
-            y = height - 50
-            c.setFont("Helvetica", 10)
-
         desc = ligne.description or "Robe de mariée sur-mesure"
         quantite = ligne.quantite or 1
 
-        c.drawString(50, y, desc[:80])
-        c.drawString(305, y, str(quantite))
-        y -= 16
+        # On coupe la description en plusieurs lignes pour éviter la troncature
+        wrapped_lines = textwrap.wrap(desc, width=95)
 
+        for i, line in enumerate(wrapped_lines):
+            if y < 80:
+                c.showPage()
+                y = height - 50
+                c.setFont("Helvetica", 10)
+
+            c.drawString(50, y, line)
+            # Qté uniquement sur la première ligne
+            if i == 0:
+                c.drawRightString(540, y, str(quantite))
+            y -= 16
 
     y -= 10
     c.line(50, y, width - 50, y)
@@ -773,7 +962,6 @@ def get_devis_pdf(
 
     c.setFont("Helvetica", 10)
 
-    # Boutique : toujours HT + TVA + TTC
     c.drawString(60, y, "Montant HT :")
     c.drawRightString(540, y, f"{partenaire_ht:.2f} €")
     y -= 14
@@ -829,139 +1017,6 @@ def get_devis_pdf(
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
-# =========================
-# PDF BON DE COMMANDE
-# =========================
-
-@router.get("/devis/{devis_id}/bon-commande.pdf")
-def get_bon_commande_pdf(
-    devis_id: int,
-    db: Session = Depends(get_db),
-    boutique: models.Boutique = Depends(get_current_boutique),
-):
-    devis = (
-        db.query(models.Devis)
-        .filter(
-            models.Devis.id == devis_id,
-            models.Devis.boutique_id == boutique.id,
-        )
-        .first()
-    )
-    if not devis:
-        raise HTTPException(status_code=404, detail="Devis introuvable")
-
-    if devis.statut != models.StatutDevis.ACCEPTE:
-        raise HTTPException(
-            status_code=400,
-            detail="Le bon de commande n'est disponible que pour les devis acceptés.",
-        )
-
-    prix = compute_prix_boutique_et_client(devis)
-    has_tva = bool(boutique.numero_tva)
-
-    partenaire_ht = prix["partenaire_ht"]
-    partenaire_tva = prix["partenaire_tva"]
-    partenaire_ttc = prix["partenaire_ttc"]
-    client_ht = prix["client_ht"]
-    client_tva = prix["client_tva"]
-    client_ttc = prix["client_ttc"]
-
-    montant_a_payer = partenaire_ht if has_tva else partenaire_ttc
-    label_montant = (
-        "Montant à payer par la boutique (HT)"
-        if has_tva
-        else "Montant à payer par la boutique (TTC)"
-    )
-
-    # PDF
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-
-    y = height - 50
-
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, y, "Bon de commande")
-    y -= 24
-
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, f"Boutique : {boutique.nom}")
-    y -= 14
-    c.drawString(50, y, f"Devis n° {devis.numero_boutique} (id interne {devis.id})")
-    y -= 24
-
-    # Récap montants boutique
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Récapitulatif des montants (boutique) :")
-    y -= 18
-
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, "Montant HT Constance → Boutique :")
-    c.drawRightString(540, y, f"{partenaire_ht:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "TVA (20 %) :")
-    c.drawRightString(540, y, f"{partenaire_tva:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "Montant TTC Constance → Boutique :")
-    c.drawRightString(540, y, f"{partenaire_ttc:.2f} €")
-    y -= 18
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(60, y, label_montant + " :")
-    c.drawRightString(540, y, f"{montant_a_payer:.2f} €")
-    y -= 24
-
-    # Prix client conseillé (utile pour mémoire)
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Prix client conseillé :")
-    y -= 18
-
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, "Montant HT conseillé au client :")
-    c.drawRightString(540, y, f"{client_ht:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "TVA (20 %) sur prix client :")
-    c.drawRightString(540, y, f"{client_tva:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "Montant TTC conseillé au client :")
-    c.drawRightString(540, y, f"{client_ttc:.2f} €")
-    y -= 24
-
-    # Bloc mesures
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Mesures :")
-    y -= 18
-    c.setFont("Helvetica", 10)
-
-    for dm in devis.mesures:
-        label = (
-            dm.mesure_type.label
-            if dm.mesure_type
-            else f"Mesure #{dm.mesure_type_id}"
-        )
-        c.drawString(60, y, f"- {label}: {dm.valeur:.1f} cm")
-        y -= 14
-        if y < 80:
-            c.showPage()
-            y = height - 50
-            c.setFont("Helvetica", 10)
-
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename=\"bon_commande_devis_{devis.id}.pdf\"'
-        },
-    )

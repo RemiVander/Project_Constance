@@ -209,18 +209,85 @@ export default function NouveauDevisPage() {
       return;
     }
 
+    if (!options) {
+      setSaveError("Les options n'ont pas été chargées.");
+      return;
+    }
+
+    // --- Construction de la description détaillée ---
+    const parts: string[] = [];
+
+    const addTransfo = (label: string, id: number | null) => {
+      if (!id) return;
+      const t = options.tarifs_transformations.find((tr) => tr.id === id);
+      if (!t) return;
+      const extra = t.epaisseur_ou_option ? ` – ${t.epaisseur_ou_option}` : "";
+      parts.push(`${label} : ${t.finition}${extra}`);
+    };
+
+    const addTissu = (label: string, id: number | null) => {
+      if (!id) return;
+      const t = options.tarifs_tissus.find((ti) => ti.id === id);
+      if (!t) return;
+      const detail = t.detail ? ` – ${t.detail}` : "";
+      parts.push(`${label} : ${t.categorie}${detail}`);
+    };
+
+    // Transformations
+    addTransfo("Décolleté devant", decDevantId);
+    addTransfo("Décolleté dos", decDosId);
+    addTransfo("Découpe devant", decoupeDevantId);
+    addTransfo("Découpe dos", decoupeDosId);
+    addTransfo("Manches", manchesId);
+    addTransfo("Bas de robe", basId);
+
+    // Tissus
+    addTissu("Tissu devant", tissuDevantId);
+    addTissu("Tissu dos", tissuDosId);
+    addTissu("Tissu manches", tissuManchesId);
+    addTissu("Tissu bas", tissuBasId);
+    if (avecCeinture && tissuCeintureId) {
+      addTissu("Ceinture", tissuCeintureId);
+    }
+
+    // Finitions supplémentaires
+    if (finitionsIds.length > 0) {
+      const noms = finitionsIds
+        .map((id) =>
+          options.finitions_supplementaires.find((f) => f.id === id)?.nom,
+        )
+        .filter(Boolean);
+      if (noms.length > 0) {
+        parts.push(`Finitions : ${noms.join(", ")}`);
+      }
+    }
+
+    // Accessoires
+    if (accessoiresIds.length > 0) {
+      const noms = accessoiresIds
+        .map((id) =>
+          options.accessoires.find((a) => a.id === id)?.nom,
+        )
+        .filter(Boolean);
+      if (noms.length > 0) {
+        parts.push(`Accessoires : ${noms.join(", ")}`);
+      }
+    }
+
+    const description =
+      parts.length > 0
+        ? parts.join(" | ")
+        : "Robe de mariée sur-mesure";
+
     setSaving(true);
     try {
-      const description =
-        "Devis généré depuis le front boutique (robe entièrement personnalisée)";
-
       const created = (await apiFetch("/api/boutique/devis", {
         method: "POST",
         body: JSON.stringify({
           lignes: [
             {
               robe_modele_id: null,
-              description : null,
+              description,
               quantite: 1,
               prix_unitaire: prixBaseHt,
             },
@@ -239,6 +306,7 @@ export default function NouveauDevisPage() {
       setSaving(false);
     }
   }
+
 
   if (loading) {
     return <p>Chargement des options...</p>;

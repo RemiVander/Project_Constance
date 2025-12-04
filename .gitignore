@@ -4,6 +4,9 @@
 venv/
 .env/
 .env.local
+.env
+*.env
+
 
 # =========================
 # SCRIPTS LOCAUX (non versionnés)
