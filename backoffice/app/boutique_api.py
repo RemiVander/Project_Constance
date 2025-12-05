@@ -233,7 +233,6 @@ def build_devis_public(
     prix = compute_prix_boutique_et_client(devis)
     has_tva = bool(boutique.numero_tva)
 
-    # ce que tu factures à la boutique (affiché dans l’historique/suivi)
     if has_tva:
         prix_boutique_affiche = prix["partenaire_ht"]
     else:
@@ -384,6 +383,7 @@ def get_options(
                 "prix": t.prix,
                 "est_decollete": t.est_decollete,
                 "ceinture_possible": t.ceinture_possible,
+                "nb_epaisseurs": getattr(t, "nb_epaisseurs", None),
             }
             for t in transfos
         ],
@@ -395,6 +395,9 @@ def get_options(
                 "detail": t.detail,
                 "forme": t.forme,
                 "prix": t.prix,
+                "nb_epaisseurs": getattr(t, "nb_epaisseurs", None),
+                "mono_epaisseur": getattr(t, "mono_epaisseur", None),
+                "matiere": getattr(t, "matiere", None),
             }
             for t in tissus
         ],
@@ -632,6 +635,7 @@ def list_bons_commande(
         )
     return result
 
+
 @router.get("/devis/{devis_id}/bon-commande.pdf")
 def get_bon_commande_pdf(
     devis_id: int,
@@ -680,7 +684,7 @@ def get_bon_commande_pdf(
     )
 
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
+    c = canvas.Canvas(buffer, pagesizes=A4)
     width, height = A4
     y = height - 50
 
@@ -942,7 +946,6 @@ def get_devis_pdf(
         desc = ligne.description or "Robe de mariée sur-mesure"
         quantite = ligne.quantite or 1
 
-        # On coupe la description en plusieurs lignes pour éviter la troncature
         wrapped_lines = textwrap.wrap(desc, width=95)
 
         for i, line in enumerate(wrapped_lines):
@@ -1005,7 +1008,7 @@ def get_devis_pdf(
 
     # Mentions
     c.setFont("Helvetica", 9)
-    c.drawString(50, y, "Devis valable 20 jours à compter de sa date d’émission.")
+    c.drawString(50, y, "Devis valable 20 jours à compter de sa date d'émission.")
     y -= 12
     c.drawString(50, y, "Tout acompte, une fois versé, ne pourra être restitué.")
     y -= 12
@@ -1025,4 +1028,3 @@ def get_devis_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-

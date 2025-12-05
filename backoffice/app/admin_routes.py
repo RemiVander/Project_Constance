@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
@@ -7,10 +6,9 @@ from sqlalchemy import func
 import secrets
 
 from .database import SessionLocal
-from .auth import get_current_admin, get_password_hash
+from .auth import get_current_admin, get_password_hash, require_admin
 from . import models
 from .email_utils import send_boutique_password_email
-from .auth import require_admin 
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -24,6 +22,8 @@ def get_db():
     finally:
         db.close()
 
+
+# ========= Auth admin =========
 
 @router.get("/admin/login")
 def login_page(request: Request):
@@ -40,6 +40,7 @@ def login_page(request: Request):
     )
 
 
+# ========= Dashboard =========
 
 @router.get("/admin/dashboard")
 def admin_dashboard(
@@ -104,7 +105,7 @@ def api_ca_par_boutique(
     }
 
 
-# ========= Suivi des boutiques =========
+# ========= Boutiques =========
 
 @router.get("/admin/boutiques")
 def boutiques_list(
@@ -112,9 +113,9 @@ def boutiques_list(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    boutiques = db.query(models.Boutique).order_by(models.Boutique.date_creation.desc()).all()
+    boutiques = db.query(models.Boutique).order_by(models.Boutique.nom).all()
     return templates.TemplateResponse(
-        "admin_boutiques_list.html",
+        "admin_boutiques.html",
         {
             "request": request,
             "admin": admin,
@@ -124,9 +125,10 @@ def boutiques_list(
     )
 
 
-@router.get("/admin/boutiques/nouvelle")
-def boutique_create_page(
+@router.get("/admin/boutiques/create")
+def boutique_create_form(
     request: Request,
+    db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
     return templates.TemplateResponse(
@@ -139,7 +141,7 @@ def boutique_create_page(
     )
 
 
-@router.post("/admin/boutiques/nouvelle")
+@router.post("/admin/boutiques/create")
 def boutique_create(
     request: Request,
     nom: str = Form(...),
@@ -147,36 +149,34 @@ def boutique_create(
     gerant: str = Form(""),
     telephone: str = Form(""),
     adresse: str = Form(""),
+    numero_tva: str = Form(""),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    plain_password = secrets.token_urlsafe(10)
-
-    existing = db.query(models.Boutique).filter_by(email=email).first()
+    existing = db.query(models.Boutique).filter(models.Boutique.email == email).first()
     if existing:
-        return templates.TemplateResponse(
-            "admin_boutique_create.html",
-            {
-                "request": request,
-                "admin": admin,
-                "error": "Une boutique avec cet email existe déjà.",
-                "page": "boutiques",
-            },
-        )
+        # on pourrait renvoyer une erreur, pour l'instant on revient à la liste
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
 
+    plain_password = secrets.token_urlsafe(8)
     boutique = models.Boutique(
         nom=nom,
         email=email,
         gerant=gerant or None,
         telephone=telephone or None,
         adresse=adresse or None,
+        numero_tva=numero_tva or None,
         mot_de_passe_hash=get_password_hash(plain_password),
         doit_changer_mdp=True,
     )
     db.add(boutique)
     db.commit()
 
-    send_boutique_password_email(to_email=email, boutique_name=nom, password=plain_password)
+    send_boutique_password_email(
+        to_email=email,
+        boutique_name=nom,
+        password=plain_password,
+    )
 
     return RedirectResponse(url="/admin/boutiques", status_code=302)
 
@@ -239,6 +239,53 @@ def boutique_detail(
             "page": "boutiques",
         },
     )
+
+
+@router.get("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
+def edit_boutique_form(
+    boutique_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    return templates.TemplateResponse(
+        "admin_boutique_edit.html",
+        {
+            "request": request,
+            "boutique": boutique,
+            "page": "boutiques",
+        },
+    )
+
+
+@router.post("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
+def edit_boutique(
+    boutique_id: int,
+    request: Request,
+    nom: str = Form(...),
+    email: str = Form(...),
+    gerant: str = Form(""),
+    telephone: str = Form(""),
+    adresse: str = Form(""),
+    numero_tva: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    boutique.nom = nom
+    boutique.email = email
+    boutique.gerant = gerant or None
+    boutique.telephone = telephone or None
+    boutique.adresse = adresse or None
+    boutique.numero_tva = numero_tva or None
+
+    db.commit()
+    return RedirectResponse(url=f"/admin/boutiques/{boutique_id}", status_code=302)
 
 
 # ========= Produits : modèles de robes =========
@@ -326,7 +373,11 @@ def list_tarifs_transformations(
     tarifs = (
         db.query(models.TransformationTarif)
         .outerjoin(models.RobeModele, models.TransformationTarif.robe_modele_id == models.RobeModele.id)
-        .order_by(models.TransformationTarif.categorie, models.RobeModele.nom, models.TransformationTarif.finition)
+        .order_by(
+            models.TransformationTarif.categorie,
+            models.RobeModele.nom,
+            models.TransformationTarif.finition,
+        )
         .all()
     )
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
@@ -353,18 +404,19 @@ def create_tarif_transformation(
     prix: float = Form(0.0),
     est_decollete: str = Form("off"),
     ceinture_possible: str = Form("on"),
+    nb_epaisseurs: int = Form(0),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    # Interprétation initiale des cases
+    # interprétation initiale des cases
     est_deco_bool = est_decollete == "on"
     ceinture_bool = ceinture_possible == "on"
 
-    # Règle métier : est_decollete ne concerne que Décolleté devant / Décolleté dos
+    # règle métier : est_decollete ne concerne que Décolleté devant / Décolleté dos
     if categorie not in ["Décolleté devant", "Décolleté dos"]:
         est_deco_bool = False
 
-    # Règle métier : ceinture_possible ne concerne que Découpe devant
+    # règle métier : ceinture_possible ne concerne que Découpe devant
     if categorie != "Découpe devant":
         ceinture_bool = True
 
@@ -376,6 +428,7 @@ def create_tarif_transformation(
         prix=prix,
         est_decollete=est_deco_bool,
         ceinture_possible=ceinture_bool,
+        nb_epaisseurs=nb_epaisseurs or None,
     )
     db.add(t)
     db.commit()
@@ -393,6 +446,7 @@ def update_tarif_transformation(
     prix: float = Form(0.0),
     est_decollete: str = Form("off"),
     ceinture_possible: str = Form("off"),
+    nb_epaisseurs: int = Form(0),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -416,6 +470,8 @@ def update_tarif_transformation(
     t.prix = prix
     t.est_decollete = est_deco_bool
     t.ceinture_possible = ceinture_bool
+    t.nb_epaisseurs = nb_epaisseurs or None
+
     db.commit()
     return RedirectResponse(url="/admin/tarifs/transformations", status_code=302)
 
@@ -445,7 +501,11 @@ def list_tarifs_tissus(
     tarifs = (
         db.query(models.TissuTarif)
         .outerjoin(models.RobeModele, models.TissuTarif.robe_modele_id == models.RobeModele.id)
-        .order_by(models.TissuTarif.categorie, models.RobeModele.nom, models.TissuTarif.detail)
+        .order_by(
+            models.TissuTarif.categorie,
+            models.RobeModele.nom,
+            models.TissuTarif.detail,
+        )
         .all()
     )
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
@@ -470,6 +530,9 @@ def create_tarif_tissu(
     detail: str = Form(...),
     forme: str = Form(""),
     prix: float = Form(0.0),
+    nb_epaisseurs: int = Form(0),
+    mono_epaisseur: str = Form("off"),
+    matiere: str = Form(""),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -479,6 +542,9 @@ def create_tarif_tissu(
         detail=detail,
         forme=forme or None,
         prix=prix,
+        nb_epaisseurs=nb_epaisseurs or None,
+        mono_epaisseur=True if mono_epaisseur == "on" else False,
+        matiere=matiere or None,
     )
     db.add(t)
     db.commit()
@@ -494,17 +560,25 @@ def update_tarif_tissu(
     detail: str = Form(...),
     forme: str = Form(""),
     prix: float = Form(0.0),
+    nb_epaisseurs: int = Form(0),
+    mono_epaisseur: str = Form("off"),
+    matiere: str = Form(""),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
     t = db.query(models.TissuTarif).get(tarif_id)
     if not t:
         return RedirectResponse(url="/admin/tarifs/tissus", status_code=302)
+
     t.categorie = categorie
     t.robe_modele_id = robe_modele_id or None
     t.detail = detail
     t.forme = forme or None
     t.prix = prix
+    t.nb_epaisseurs = nb_epaisseurs or None
+    t.mono_epaisseur = True if mono_epaisseur == "on" else False
+    t.matiere = matiere or None
+
     db.commit()
     return RedirectResponse(url="/admin/tarifs/tissus", status_code=302)
 
@@ -549,11 +623,15 @@ def create_finition_supp(
     request: Request,
     nom: str = Form(...),
     prix: float = Form(0.0),
-    est_fente: bool = Form(False),
+    est_fente: str = Form("off"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    f = models.FinitionSupplementaire(nom=nom, prix=prix, est_fente=est_fente)
+    f = models.FinitionSupplementaire(
+        nom=nom,
+        prix=prix,
+        est_fente=True if est_fente == "on" else False,
+    )
     db.add(f)
     db.commit()
     return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
@@ -565,7 +643,7 @@ def update_finition_supp(
     request: Request,
     nom: str = Form(...),
     prix: float = Form(0.0),
-    est_fente: bool = Form(False),
+    est_fente: str = Form("off"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -574,10 +652,9 @@ def update_finition_supp(
         return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
     f.nom = nom
     f.prix = prix
-    f.est_fente = est_fente
+    f.est_fente = True if est_fente == "on" else False
     db.commit()
     return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
-
 
 
 @router.post("/admin/finitions_supplementaires/{finition_id}/delete")
@@ -666,175 +743,3 @@ def delete_accessoire(
         db.delete(a)
         db.commit()
     return RedirectResponse(url="/admin/produits/accessoires", status_code=302)
-
-
-@router.get("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
-def edit_boutique_form(boutique_id: int, request: Request, db: Session = Depends(get_db)):
-    boutique = db.query(models.Boutique).get(boutique_id)
-    if not boutique:
-        return RedirectResponse(url="/admin/boutiques", status_code=303)
-    return templates.TemplateResponse(
-        "admin_boutique_edit.html",
-        {"request": request, "boutique": boutique},
-    )
-
-
-@router.post("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
-def edit_boutique_submit(
-    boutique_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    nom: str = Form(...),
-    email: str = Form(...),
-    gerant: str = Form(""),
-    telephone: str = Form(""),
-    adresse: str = Form(""),
-    numero_tva: str = Form(""),
-    actif: bool = Form(False),
-):
-    boutique = db.query(models.Boutique).get(boutique_id)
-    if not boutique:
-        return RedirectResponse(url="/admin/boutiques", status_code=303)
-
-    boutique.nom = nom
-    boutique.email = email
-    boutique.gerant = gerant or None
-    boutique.telephone = telephone or None
-    boutique.adresse = adresse or None
-    boutique.numero_tva = numero_tva or None
-    boutique.actif = actif
-
-    db.add(boutique)
-    db.commit()
-
-    return RedirectResponse(
-        url=f"/admin/boutiques/{boutique_id}", status_code=303
-    )
-
-# ========= Produits : types de mesures =========
-
-@router.get("/admin/produits/mesures")
-def admin_mesures_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
-):
-    mesures = (
-        db.query(models.MesureType)
-        .order_by(models.MesureType.ordre, models.MesureType.id)
-        .all()
-    )
-    return templates.TemplateResponse(
-        "admin_mesures.html",
-        {
-            "request": request,
-            "admin": admin,
-            "mesures": mesures,
-            "page": "produits",
-            "sous_page": "mesures",
-        },
-    )
-
-
-@router.post("/admin/produits/mesures/create")
-def admin_mesure_create(
-    request: Request,
-    label: str = Form(...),
-    code: str = Form(""),
-    obligatoire: str = Form("on"),
-    ordre: int = Form(0),
-    db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
-):
-    # si l'admin laisse le code vide, on le dérive du label
-    code_final = code.strip() or label.lower().replace(" ", "_").replace("'", "").replace("/", "_")
-
-    m = models.MesureType(
-        code=code_final,
-        label=label.strip(),
-        obligatoire=(obligatoire == "on"),
-        ordre=ordre,
-    )
-    db.add(m)
-    db.commit()
-    return RedirectResponse(url="/admin/produits/mesures", status_code=303)
-
-
-@router.post("/admin/produits/mesures/{mesure_id}/update")
-def admin_mesure_update(
-    mesure_id: int,
-    request: Request,
-    label: str = Form(...),
-    obligatoire: str = Form("off"),
-    ordre: int = Form(0),
-    db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
-):
-    m = db.query(models.MesureType).get(mesure_id)
-    if not m:
-        return RedirectResponse(url="/admin/produits/mesures", status_code=303)
-
-    m.label = label.strip()
-    m.obligatoire = (obligatoire == "on")
-    m.ordre = ordre
-
-    db.add(m)
-    db.commit()
-    return RedirectResponse(url="/admin/produits/mesures", status_code=303)
-
-
-@router.post("/admin/produits/mesures/{mesure_id}/delete")
-def admin_mesure_delete(
-    mesure_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
-):
-    m = db.query(models.MesureType).get(mesure_id)
-    if m:
-        db.delete(m)
-        db.commit()
-    return RedirectResponse(url="/admin/produits/mesures", status_code=303)
-
-
-@router.post("/admin/bons-commandes/{bon_commande_id}/statut")
-def bon_commande_change_statut(
-    bon_commande_id: int,
-    request: Request,
-    statut: str = Form(...),
-    commentaire_admin: str = Form(""),
-    db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
-):
-    bc = db.query(models.BonCommande).get(bon_commande_id)
-    if not bc or not bc.devis or not bc.devis.boutique_id:
-        return RedirectResponse(url="/admin/boutiques", status_code=302)
-
-    try:
-        bc.statut = models.StatutBonCommande(statut)
-    except ValueError:
-        return RedirectResponse(
-            url=f"/admin/boutiques/{bc.devis.boutique_id}",
-            status_code=302,
-        )
-
-    # commentaire admin (obligatoire pour A_MODIFIER et REFUSE)
-    statut_requiert_commentaire = {
-        models.StatutBonCommande.A_MODIFIER,
-        models.StatutBonCommande.REFUSE,
-    }
-    if bc.statut in statut_requiert_commentaire and not commentaire_admin.strip():
-        # on ne valide pas sans commentaire
-        return RedirectResponse(
-            url=f"/admin/boutiques/{bc.devis.boutique_id}?error=commentaire_obligatoire",
-            status_code=302,
-        )
-
-    if commentaire_admin.strip():
-        bc.commentaire_admin = commentaire_admin.strip()
-
-    db.commit()
-    return RedirectResponse(
-        url=f"/admin/boutiques/{bc.devis.boutique_id}",
-        status_code=302,
-    )
