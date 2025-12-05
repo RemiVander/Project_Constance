@@ -20,6 +20,7 @@ type TransformationTarif = {
   prix: number;
   est_decollete: boolean;
   ceinture_possible: boolean;
+  nb_epaisseurs?: number | null;
 };
 
 type TissuTarif = {
@@ -29,6 +30,9 @@ type TissuTarif = {
   detail: string;
   forme: string | null;
   prix: number;
+  nb_epaisseurs?: number | null;
+  mono_epaisseur?: boolean;
+  matiere?: string | null;
 };
 
 type FinitionSupp = {
@@ -53,7 +57,6 @@ type OptionsResponse = {
   accessoires: Accessoire[];
 };
 
-// Combinaisons taille / ceinture
 type ComboTaille =
   | "AUCUNE"
   | "CEINTURE_ECHANTRE_DOS"
@@ -91,8 +94,9 @@ export default function NouveauDevisPage() {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [invalidFields, setInvalidFields] = useState<string[]>([]);
 
-  // Load options
+  // Chargement des options
   useEffect(() => {
     async function load() {
       try {
@@ -111,7 +115,7 @@ export default function NouveauDevisPage() {
     load();
   }, [router]);
 
-  // --- helpers labels ---
+  // Helpers
   function getRobeNom(robeId: number | null) {
     if (!options || robeId == null) return "";
     const robe = options.robe_modeles.find((r) => r.id === robeId);
@@ -126,14 +130,6 @@ export default function NouveauDevisPage() {
     return robeNom ? `[${robeNom}] ${baseLabel}` : baseLabel;
   }
 
-  function filterTransfos(cat: string) {
-    return options?.tarifs_transformations.filter((t) => t.categorie === cat) ?? [];
-  }
-
-  function filterTissus(cat: string) {
-    return options?.tarifs_tissus.filter((t) => t.categorie === cat) ?? [];
-  }
-
   function getTransfoById(id: number | null) {
     return options?.tarifs_transformations.find((t) => t.id === id) ?? null;
   }
@@ -144,14 +140,167 @@ export default function NouveauDevisPage() {
 
   const hasManches = !!manchesId;
 
-  // Double décolleté
-  const doubleDecolleteAlerte = useMemo(() => {
-    const dev = getTransfoById(decDevantId);
-    const dos = getTransfoById(decDosId);
-    return dev?.est_decollete && dos?.est_decollete;
-  }, [decDevantId, decDosId, options]);
+  const decDevant = getTransfoById(decDevantId);
+  const decDos = getTransfoById(decDosId);
+  const decoupeDevant = getTransfoById(decoupeDevantId);
+  const decoupeDos = getTransfoById(decoupeDosId);
+  const basTransfo = getTransfoById(basId);
 
-  // Prix = coût interne (base pour les marges côté back)
+  const tissuDevant = useMemo(
+    () => getTissuById(tissuDevantId),
+    [tissuDevantId, options],
+  );
+  const tissuDos = useMemo(
+    () => getTissuById(tissuDosId),
+    [tissuDosId, options],
+  );
+  const tissuBas = useMemo(
+    () => getTissuById(tissuBasId),
+    [tissuBasId, options],
+  );
+
+  // Nb d'épaisseurs pour les découpes (référence tissus)
+  const nbDecoupeDevant = decoupeDevant?.nb_epaisseurs ?? null;
+  const nbDecoupeDos = decoupeDos?.nb_epaisseurs ?? null;
+
+  // Double décolleté
+  const doubleDecolleteAlerte = useMemo(
+    () => decDevant?.est_decollete && decDos?.est_decollete,
+    [decDevant, decDos],
+  );
+
+  // --- Filtres transformations / tissus ---
+
+  // Découpe devant : même nb d’épaisseurs que le décolleté devant (si renseigné)
+  function filterDecoupeDevantOptions() {
+    let list =
+      options?.tarifs_transformations.filter(
+        (t) => t.categorie === "Découpe devant",
+      ) ?? [];
+    const nbDecolleteDevant = decDevant?.nb_epaisseurs;
+    if (typeof nbDecolleteDevant === "number") {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" &&
+          t.nb_epaisseurs === nbDecolleteDevant,
+      );
+    }
+    return list;
+  }
+
+  // Décolleté dos : ne peut pas avoir plus d'épaisseurs que le décolleté devant
+  function filterDecolleteDosOptions() {
+    let list =
+      options?.tarifs_transformations.filter(
+        (t) => t.categorie === "Décolleté dos",
+      ) ?? [];
+    const nbDev = decDevant?.nb_epaisseurs;
+    if (typeof nbDev === "number") {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+      );
+    }
+    return list;
+  }
+
+  // Découpe dos :
+  // - nb d'épaisseurs <= découpe devant
+  // - ET nb d'épaisseurs = décolleté dos (si renseigné)
+  function filterDecoupeDosOptions() {
+    let list =
+      options?.tarifs_transformations.filter(
+        (t) => t.categorie === "Découpe dos",
+      ) ?? [];
+
+    const nbDev = decoupeDevant?.nb_epaisseurs;
+    if (typeof nbDev === "number") {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+      );
+    }
+
+    const nbDecolleteDos = decDos?.nb_epaisseurs;
+    if (typeof nbDecolleteDos === "number") {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" &&
+          t.nb_epaisseurs === nbDecolleteDos,
+      );
+    }
+
+    return list;
+  }
+
+  function filterTissusManches() {
+    return (
+      options?.tarifs_tissus.filter((t) => t.categorie === "Manches") ?? []
+    );
+  }
+
+  // Tissu bas : nb épaisseurs STRICTEMENT ÉGAL au bas
+  function filterTissusBas() {
+    let list =
+      options?.tarifs_tissus.filter((t) => t.categorie === "Bas") ?? [];
+    const nbBas = basTransfo?.nb_epaisseurs;
+    if (nbBas != null) {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs === nbBas,
+      );
+    }
+    return list;
+  }
+
+  // Tissu devant : nb épaisseurs STRICTEMENT ÉGAL à la découpe devant
+  function filterTissusDevant() {
+    let list =
+      options?.tarifs_tissus.filter((t) => t.categorie === "devant") ?? [];
+
+    if (nbDecoupeDevant != null) {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" &&
+          t.nb_epaisseurs === nbDecoupeDevant,
+      );
+    }
+
+    return list;
+  }
+
+  // Tissu dos : nb épaisseurs STRICTEMENT ÉGAL à la découpe dos
+  // + pas plus d'épaisseurs que le tissu devant
+  // + crêpe dos seulement si devant est en crêpe
+  function filterTissusDos() {
+    let list =
+      options?.tarifs_tissus.filter((t) => t.categorie === "Dos") ?? [];
+
+    if (nbDecoupeDos != null) {
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" &&
+          t.nb_epaisseurs === nbDecoupeDos,
+      );
+    }
+
+    if (tissuDevant?.nb_epaisseurs != null) {
+      const nbDev = tissuDevant.nb_epaisseurs;
+      list = list.filter(
+        (t) =>
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+      );
+    }
+
+    if (tissuDevant && tissuDevant.matiere !== "crepe") {
+      list = list.filter((t) => t.matiere !== "crepe");
+    }
+
+    return list;
+  }
+
+  // --- Prix (coût interne) ---
+
   const coutInterneTotal = useMemo(() => {
     if (!options) return 0;
     let total = 0;
@@ -166,7 +315,6 @@ export default function NouveauDevisPage() {
       if (t) total += t.prix;
     };
 
-    // Transformations de base
     addT(decDevantId);
     addT(decDosId);
     addT(decoupeDevantId);
@@ -174,7 +322,6 @@ export default function NouveauDevisPage() {
     addT(manchesId);
     addT(basId);
 
-    // Règle métier : combinaisons ceinture / remonté devant / échancré dos
     const ceintureTransfo = options.tarifs_transformations.find(
       (t) => t.categorie === "Ceinture",
     );
@@ -212,25 +359,21 @@ export default function NouveauDevisPage() {
         break;
     }
 
-    // Tissus
     addTi(tissuDevantId);
     addTi(tissuDosId);
     addTi(tissuManchesId);
     addTi(tissuBasId);
 
-    // Finitions supp
     for (const id of finitionsIds) {
       const f = options.finitions_supplementaires.find((x) => x.id === id);
       if (f) total += f.prix;
     }
 
-    // Accessoires (hors housse auto)
     for (const id of accessoiresIds) {
       const a = options.accessoires.find((x) => x.id === id);
       if (a) total += a.prix;
     }
 
-    // Housse ajoutée automatiquement
     const housse = options.accessoires.find((a) =>
       a.nom.toLowerCase().includes("housse"),
     );
@@ -254,26 +397,127 @@ export default function NouveauDevisPage() {
     comboTaille,
   ]);
 
+  // --- UI erreurs & helpers communs ---
+
+  const hasError = (key: string) => invalidFields.includes(key);
+
+  const baseSelectClass = "w-full border rounded px-3 py-2 text-sm";
+  const classFor = (key: string) =>
+    hasError(key)
+      ? `${baseSelectClass} border-red-500 bg-red-50`
+      : baseSelectClass;
+
+  const clearFieldError = (keys: string | string[]) => {
+    const arr = Array.isArray(keys) ? keys : [keys];
+    setInvalidFields((prev) => prev.filter((k) => !arr.includes(k)));
+  };
+
+  // --- Submit ---
+
   async function handleSubmit() {
-    setSaveError(null);
-
-    if (!options) return setSaveError("Options non chargées.");
-
-    // VALIDATION
-    const errors: string[] = [];
-    if (!tissuDevantId) errors.push("Le tissu devant est obligatoire.");
-    if (!tissuBasId) errors.push("Le tissu bas est obligatoire.");
-    if (hasManches && !tissuManchesId)
-      errors.push("Le tissu manches est obligatoire si des manches sont choisies.");
-
-    if (errors.length > 0) {
-      setSaveError(errors.join(" "));
+    if (!options) {
+      setSaveError("Options non chargées.");
       return;
     }
 
-    if (coutInterneTotal <= 0) {
-      return setSaveError("Le devis est vide ou incomplet.");
+    const newInvalid: string[] = [];
+
+    // Champs requis
+    if (!tissuDevantId) newInvalid.push("tissuDevant");
+    if (!tissuBasId) newInvalid.push("tissuBas");
+    if (hasManches && !tissuManchesId) newInvalid.push("tissuManches");
+
+    // Décolleté devant & Découpe devant : même nb d'épaisseurs
+    if (
+      typeof decDevant?.nb_epaisseurs === "number" &&
+      typeof decoupeDevant?.nb_epaisseurs === "number" &&
+      decDevant.nb_epaisseurs !== decoupeDevant.nb_epaisseurs
+    ) {
+      newInvalid.push("decDevant", "decoupeDevant");
     }
+
+    // Décolleté dos & Découpe dos : même nb d'épaisseurs
+    if (
+      typeof decDos?.nb_epaisseurs === "number" &&
+      typeof decoupeDos?.nb_epaisseurs === "number" &&
+      decDos.nb_epaisseurs !== decoupeDos.nb_epaisseurs
+    ) {
+      newInvalid.push("decDos", "decoupeDos");
+    }
+
+    // Décolleté dos <= décolleté devant
+    if (
+      typeof decDevant?.nb_epaisseurs === "number" &&
+      typeof decDos?.nb_epaisseurs === "number" &&
+      decDos.nb_epaisseurs > decDevant.nb_epaisseurs
+    ) {
+      newInvalid.push("decDevant", "decDos");
+    }
+
+    // Découpe dos <= découpe devant
+    if (
+      typeof decoupeDevant?.nb_epaisseurs === "number" &&
+      typeof decoupeDos?.nb_epaisseurs === "number" &&
+      decoupeDos.nb_epaisseurs > decoupeDevant.nb_epaisseurs
+    ) {
+      newInvalid.push("decoupeDevant", "decoupeDos");
+    }
+
+    // Tissu devant = découpe devant
+    if (
+      tissuDevant?.nb_epaisseurs != null &&
+      decoupeDevant?.nb_epaisseurs != null &&
+      tissuDevant.nb_epaisseurs !== decoupeDevant.nb_epaisseurs
+    ) {
+      newInvalid.push("tissuDevant", "decoupeDevant");
+    }
+
+    // Tissu dos = découpe dos
+    if (
+      tissuDos?.nb_epaisseurs != null &&
+      decoupeDos?.nb_epaisseurs != null &&
+      tissuDos.nb_epaisseurs !== decoupeDos.nb_epaisseurs
+    ) {
+      newInvalid.push("tissuDos", "decoupeDos");
+    }
+
+    // Dos <= devant (tissus)
+    if (
+      tissuDevant?.nb_epaisseurs != null &&
+      tissuDos?.nb_epaisseurs != null &&
+      tissuDos.nb_epaisseurs > tissuDevant.nb_epaisseurs
+    ) {
+      newInvalid.push("tissuDevant", "tissuDos");
+    }
+
+    // Crêpe : sécurité
+    if (
+      tissuDos?.matiere === "crepe" &&
+      tissuDevant &&
+      tissuDevant.matiere !== "crepe"
+    ) {
+      newInvalid.push("tissuDevant", "tissuDos");
+    }
+
+    // Tissu bas = bas
+    if (
+      tissuBas?.nb_epaisseurs != null &&
+      basTransfo?.nb_epaisseurs != null &&
+      tissuBas.nb_epaisseurs !== basTransfo.nb_epaisseurs
+    ) {
+      newInvalid.push("tissuBas", "bas");
+    }
+
+    if (newInvalid.length > 0 || coutInterneTotal <= 0) {
+      setInvalidFields([...new Set(newInvalid)]);
+      setSaveError(
+        "Merci de remplir tous les champs requis et de corriger les incohérences.",
+      );
+      return;
+    }
+
+    setInvalidFields([]);
+    setSaveError(null);
 
     // Description lisible
     const parts: string[] = [];
@@ -300,7 +544,6 @@ export default function NouveauDevisPage() {
     addTDesc("Manches", manchesId);
     addTDesc("Bas de robe", basId);
 
-    // Description pour la combo taille / ceinture
     switch (comboTaille) {
       case "CEINTURE_ECHANTRE_DOS":
         parts.push("Découpe taille : ceinture + échancré dos");
@@ -327,7 +570,6 @@ export default function NouveauDevisPage() {
     addTiDesc("Tissu manches", tissuManchesId);
     addTiDesc("Tissu bas", tissuBasId);
 
-    // Housse dans la description
     const housse = options.accessoires.find((a) =>
       a.nom.toLowerCase().includes("housse"),
     );
@@ -357,7 +599,9 @@ export default function NouveauDevisPage() {
       if (created?.id) router.push(`/devis/${created.id}/confirmation`);
       else router.push("/dashboard");
     } catch (err: any) {
-      setSaveError(err.message || "Erreur création devis");
+      setSaveError(
+        err.message || "Erreur lors de la création du devis. Veuillez réessayer.",
+      );
     } finally {
       setSaving(false);
     }
@@ -371,6 +615,8 @@ export default function NouveauDevisPage() {
         {loadError && <p className="text-xs">{loadError}</p>}
       </div>
     );
+
+  // --- Rendu ---
 
   return (
     <div className="space-y-6">
@@ -405,18 +651,39 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-decollete-devant"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("decDevant")}
               value={decDevantId ?? ""}
-              onChange={(e) =>
-                setDecDevantId(e.target.value ? Number(e.target.value) : null)
-              }
+              onChange={(e) => {
+                const newId = e.target.value ? Number(e.target.value) : null;
+                setDecDevantId(newId);
+                clearFieldError(["decDevant", "decoupeDevant", "decDos"]);
+
+                // Reset découpe devant si non compatible en nb d'épaisseurs
+                const newTransfo = getTransfoById(newId);
+                const nbNew = newTransfo?.nb_epaisseurs;
+                if (typeof nbNew === "number") {
+                  setDecoupeDevantId((prev) => {
+                    const current = getTransfoById(prev);
+                    if (
+                      current &&
+                      typeof current.nb_epaisseurs === "number" &&
+                      current.nb_epaisseurs !== nbNew
+                    ) {
+                      return null;
+                    }
+                    return prev;
+                  });
+                }
+              }}
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté devant").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
-                </option>
-              ))}
+              {options.tarifs_transformations
+                .filter((t) => t.categorie === "Décolleté devant")
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {buildTransfoLabel(t)}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -430,16 +697,22 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-decoupe-devant"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("decoupeDevant")}
               value={decoupeDevantId ?? ""}
-              onChange={(e) =>
+              onChange={(e) => {
                 setDecoupeDevantId(
                   e.target.value ? Number(e.target.value) : null,
-                )
-              }
+                );
+                clearFieldError([
+                  "decoupeDevant",
+                  "decoupeDos",
+                  "tissuDevant",
+                  "decDevant",
+                ]);
+              }}
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe devant").map((t) => (
+              {filterDecoupeDevantOptions().map((t) => (
                 <option key={t.id} value={t.id}>
                   {buildTransfoLabel(t)}
                 </option>
@@ -447,7 +720,7 @@ export default function NouveauDevisPage() {
             </select>
           </div>
 
-          {/* Combo taille / ceinture */}
+          {/* Découpe taille / ceinture */}
           <div className="mb-3">
             <label
               className="block text-sm font-medium mb-1"
@@ -457,7 +730,7 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-decoupe-taille"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={baseSelectClass}
               value={comboTaille}
               onChange={(e) =>
                 setComboTaille(e.target.value as ComboTaille)
@@ -490,20 +763,53 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-manches"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={baseSelectClass}
               value={manchesId ?? ""}
-              onChange={(e) =>
-                setManchesId(e.target.value ? Number(e.target.value) : null)
-              }
+              onChange={(e) => {
+                setManchesId(e.target.value ? Number(e.target.value) : null);
+                clearFieldError("tissuManches");
+              }}
             >
               <option value="">Aucune</option>
-              {filterTransfos("Manches").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
-                </option>
-              ))}
+              {options.tarifs_transformations
+                .filter((t) => t.categorie === "Manches")
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {buildTransfoLabel(t)}
+                  </option>
+                ))}
             </select>
           </div>
+
+          {/* Tissu manches */}
+          {hasManches && (
+            <div className="mb-3">
+              <label
+                className="block text-sm font-medium mb-1"
+                htmlFor="select-tissu-manches"
+              >
+                Tissu manches
+              </label>
+              <select
+                id="select-tissu-manches"
+                className={classFor("tissuManches")}
+                value={tissuManchesId ?? ""}
+                onChange={(e) => {
+                  setTissuManchesId(
+                    e.target.value ? Number(e.target.value) : null,
+                  );
+                  clearFieldError("tissuManches");
+                }}
+              >
+                <option value="">Aucun</option>
+                {filterTissusManches().map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.detail}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Bas */}
           <div className="mb-3">
@@ -515,116 +821,89 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-bas"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("bas")}
               value={basId ?? ""}
-              onChange={(e) =>
-                setBasId(e.target.value ? Number(e.target.value) : null)
-              }
+              onChange={(e) => {
+                setBasId(e.target.value ? Number(e.target.value) : null);
+                clearFieldError(["bas", "tissuBas"]);
+              }}
             >
               <option value="">Aucun</option>
-              {filterTransfos("Bas").map((t) => (
+              {options.tarifs_transformations
+                .filter((t) => t.categorie === "Bas")
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {buildTransfoLabel(t)}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Tissu devant */}
+          <div className="mt-4">
+            <label
+              className="block text-sm font-medium mb-1"
+              htmlFor="select-tissu-devant"
+            >
+              Tissu devant
+            </label>
+            <select
+              id="select-tissu-devant"
+              className={classFor("tissuDevant")}
+              value={tissuDevantId ?? ""}
+              onChange={(e) => {
+                setTissuDevantId(
+                  e.target.value ? Number(e.target.value) : null,
+                );
+                clearFieldError(["tissuDevant", "tissuDos"]);
+              }}
+            >
+              <option value="">Aucun</option>
+              {filterTissusDevant().map((t) => (
                 <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
+                  {t.detail}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* TISSUS DEVANT / MANCHES / BAS */}
-          <div className="space-y-3 mt-4">
-            {/* Tissu devant */}
-            <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                htmlFor="select-tissu-devant"
-              >
-                Tissu devant
-              </label>
-              <select
-                id="select-tissu-devant"
-                className="w-full border rounded px-3 py-2 text-sm"
-                value={tissuDevantId ?? ""}
-                onChange={(e) =>
-                  setTissuDevantId(
-                    e.target.value ? Number(e.target.value) : null,
-                  )
-                }
-              >
-                <option value="">Aucun</option>
-                {filterTissus("devant").map((t) => (
+          {/* Tissu bas */}
+          <div className="mt-3">
+            <label
+              className="block text-sm font-medium mb-1"
+              htmlFor="select-tissu-bas"
+            >
+              Tissu bas
+            </label>
+            <select
+              id="select-tissu-bas"
+              className={classFor("tissuBas")}
+              value={tissuBasId ?? ""}
+              onChange={(e) => {
+                setTissuBasId(
+                  e.target.value ? Number(e.target.value) : null,
+                );
+                clearFieldError(["tissuBas", "bas"]);
+              }}
+            >
+              <option value="">Aucun</option>
+              {filterTissusBas().map((t) => {
+                const robeNom = getRobeNom(t.robe_modele_id);
+                const label =
+                  (robeNom ? `[${robeNom}] ` : "") +
+                  t.detail +
+                  (t.forme ? ` – ${t.forme}` : "");
+                return (
                   <option key={t.id} value={t.id}>
-                    {t.detail}
+                    {label}
                   </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Tissu manches (si manches) */}
-            {hasManches && (
-              <div>
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="select-tissu-manches"
-                >
-                  Tissu manches
-                </label>
-                <select
-                  id="select-tissu-manches"
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  value={tissuManchesId ?? ""}
-                  onChange={(e) =>
-                    setTissuManchesId(
-                      e.target.value ? Number(e.target.value) : null,
-                    )
-                  }
-                >
-                  <option value="">Aucun</option>
-                  {filterTissus("Manches").map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.detail}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Tissu bas */}
-            <div>
-              <label
-                className="block text-sm font-medium mb-1"
-                htmlFor="select-tissu-bas"
-              >
-                Tissu bas
-              </label>
-              <select
-                id="select-tissu-bas"
-                className="w-full border rounded px-3 py-2 text-sm"
-                value={tissuBasId ?? ""}
-                onChange={(e) =>
-                  setTissuBasId(
-                    e.target.value ? Number(e.target.value) : null,
-                  )
-                }
-              >
-                <option value="">Aucun</option>
-                {filterTissus("Bas").map((t) => {
-                  const robeNom = getRobeNom(t.robe_modele_id);
-                  const label =
-                    (robeNom ? `[${robeNom}] ` : "") +
-                    t.detail +
-                    (t.forme ? ` – ${t.forme}` : "");
-                  return (
-                    <option key={t.id} value={t.id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+                );
+              })}
+            </select>
           </div>
         </div>
 
-        {/* DOS + FINITIONS + ACCESSOIRES */}
+        {/* DOS + FINITIONS */}
         <div className="border rounded-xl p-4 bg-white">
           <h2 className="font-semibold mb-3">Dos & finitions</h2>
 
@@ -638,14 +917,33 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-decollete-dos"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("decDos")}
               value={decDosId ?? ""}
-              onChange={(e) =>
-                setDecDosId(e.target.value ? Number(e.target.value) : null)
-              }
+              onChange={(e) => {
+                const newId = e.target.value ? Number(e.target.value) : null;
+                setDecDosId(newId);
+                clearFieldError(["decDevant", "decDos", "decoupeDos"]);
+
+                // Reset découpe dos si non compatible en nb d'épaisseurs
+                const newTransfo = getTransfoById(newId);
+                const nbNew = newTransfo?.nb_epaisseurs;
+                if (typeof nbNew === "number") {
+                  setDecoupeDosId((prev) => {
+                    const current = getTransfoById(prev);
+                    if (
+                      current &&
+                      typeof current.nb_epaisseurs === "number" &&
+                      current.nb_epaisseurs !== nbNew
+                    ) {
+                      return null;
+                    }
+                    return prev;
+                  });
+                }
+              }}
             >
               <option value="">Aucun</option>
-              {filterTransfos("Décolleté dos").map((t) => (
+              {filterDecolleteDosOptions().map((t) => (
                 <option key={t.id} value={t.id}>
                   {buildTransfoLabel(t)}
                 </option>
@@ -663,16 +961,17 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-decoupe-dos"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("decoupeDos")}
               value={decoupeDosId ?? ""}
-              onChange={(e) =>
+              onChange={(e) => {
                 setDecoupeDosId(
                   e.target.value ? Number(e.target.value) : null,
-                )
-              }
+                );
+                clearFieldError(["decoupeDevant", "decoupeDos", "tissuDos", "decDos"]);
+              }}
             >
               <option value="">Aucune</option>
-              {filterTransfos("Découpe dos").map((t) => (
+              {filterDecoupeDosOptions().map((t) => (
                 <option key={t.id} value={t.id}>
                   {buildTransfoLabel(t)}
                 </option>
@@ -690,14 +989,15 @@ export default function NouveauDevisPage() {
             </label>
             <select
               id="select-tissu-dos"
-              className="w-full border rounded px-3 py-2 text-sm"
+              className={classFor("tissuDos")}
               value={tissuDosId ?? ""}
-              onChange={(e) =>
-                setTissuDosId(e.target.value ? Number(e.target.value) : null)
-              }
+              onChange={(e) => {
+                setTissuDosId(e.target.value ? Number(e.target.value) : null);
+                clearFieldError(["tissuDevant", "tissuDos"]);
+              }}
             >
               <option value="">Aucun</option>
-              {filterTissus("Dos").map((t) => {
+              {filterTissusDos().map((t) => {
                 const robeNom = getRobeNom(t.robe_modele_id);
                 const label =
                   (robeNom ? `[${robeNom}] ` : "") +
@@ -712,7 +1012,7 @@ export default function NouveauDevisPage() {
             </select>
           </div>
 
-          {/* FINITIONS SUPPLÉMENTAIRES */}
+          {/* Finitions supplémentaires */}
           <div className="mt-4">
             <label className="block text-sm font-medium mb-1">
               Finitions supplémentaires
@@ -732,12 +1032,16 @@ export default function NouveauDevisPage() {
                             .filter((x) => x.est_fente && x.id !== f.id)
                             .map((x) => x.id);
 
-                          newList = newList.filter((id) => !autres.includes(id));
+                          newList = newList.filter(
+                            (id) => !autres.includes(id),
+                          );
                         }
 
                         setFinitionsIds(newList);
                       } else {
-                        setFinitionsIds(finitionsIds.filter((id) => id !== f.id));
+                        setFinitionsIds(
+                          finitionsIds.filter((id) => id !== f.id),
+                        );
                       }
                     }}
                   />
@@ -747,7 +1051,7 @@ export default function NouveauDevisPage() {
             </div>
           </div>
 
-          {/* ACCESSOIRES */}
+          {/* Accessoires */}
           <div className="mt-4">
             <label className="block text-sm font-medium mb-1">Accessoires</label>
             <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
@@ -759,9 +1063,9 @@ export default function NouveauDevisPage() {
                     <input
                       type="checkbox"
                       checked={isHousse || accessoiresIds.includes(a.id)}
-                      disabled={isHousse} // housse non décochable
+                      disabled={isHousse}
                       onChange={(e) => {
-                        if (isHousse) return; // on ne touche pas à la housse
+                        if (isHousse) return;
                         if (e.target.checked) {
                           setAccessoiresIds([...accessoiresIds, a.id]);
                         } else {
@@ -789,12 +1093,8 @@ export default function NouveauDevisPage() {
         </div>
       )}
 
-      {/* VALIDATION */}
+      {/* CTA */}
       <div className="border rounded-xl p-6 bg-white flex flex-col items-center gap-2">
-        {saveError && (
-          <p className="text-xs text-red-600 text-center">{saveError}</p>
-        )}
-
         <button
           type="button"
           disabled={saving}

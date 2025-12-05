@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% block title %}Tarifs tissus{% endblock %}
 {% block content %}
@@ -6,7 +5,7 @@
 
 <div class="bg-white rounded shadow p-4 mb-6">
     <h2 class="font-semibold mb-2">Ajouter un tarif de tissu</h2>
-    <form action="/admin/tarifs/tissus/create" method="post" class="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
+    <form action="/admin/tarifs/tissus/create" method="post" class="grid grid-cols-1 md:grid-cols-8 gap-4 text-sm">
         <div>
             <label class="block text-xs font-medium mb-1">Catégorie</label>
             <input type="text" name="categorie" required class="w-full border rounded px-2 py-1" placeholder="devant, Dos, Manches...">
@@ -29,10 +28,24 @@
             <input type="text" name="forme" class="w-full border rounded px-2 py-1" placeholder="évasée, 30 degrés...">
         </div>
         <div>
+            <label class="block text-xs font-medium mb-1">Nb épaisseurs</label>
+            <input type="number" min="0" name="nb_epaisseurs" class="w-full border rounded px-2 py-1" placeholder="1, 2, 3...">
+        </div>
+        <div class="flex items-center">
+            <label class="inline-flex items-center text-xs mt-4">
+                <input type="checkbox" name="mono_epaisseur" class="mr-1">
+                Mono-épaisseur
+            </label>
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Matière</label>
+            <input type="text" name="matiere" class="w-full border rounded px-2 py-1" placeholder="crepe, dentelle...">
+        </div>
+        <div>
             <label class="block text-xs font-medium mb-1">Prix (€)</label>
             <input type="number" step="0.01" min="0" name="prix" class="w-full border rounded px-2 py-1">
         </div>
-        <div class="md:col-span-5 flex justify-end">
+        <div class="md:col-span-8 flex justify-end">
             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
                 Ajouter
             </button>
@@ -48,6 +61,9 @@
             <th class="px-2 py-2 text-left">Modèle</th>
             <th class="px-2 py-2 text-left">Détail</th>
             <th class="px-2 py-2 text-left">Forme</th>
+            <th class="px-2 py-2 text-left">Nb épaisseurs</th>
+            <th class="px-2 py-2 text-left">Mono ?</th>
+            <th class="px-2 py-2 text-left">Matière</th>
             <th class="px-2 py-2 text-left">Prix</th>
             <th class="px-2 py-2"></th>
         </tr>
@@ -72,6 +88,15 @@
                     </td>
                     <td class="px-2 py-1">
                         <input type="text" name="forme" value="{{ t.forme or '' }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="number" min="0" name="nb_epaisseurs" value="{{ t.nb_epaisseurs or '' }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1 text-center">
+                        <input type="checkbox" name="mono_epaisseur" {% if t.mono_epaisseur %}checked{% endif %}>
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="text" name="matiere" value="{{ t.matiere or '' }}" class="w-full border rounded px-1 py-0.5">
                     </td>
                     <td class="px-2 py-1">
                         <input type="number" step="0.01" name="prix" value="{{ t.prix }}" class="w-full border rounded px-1 py-0.5">

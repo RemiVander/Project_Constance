@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% block title %}Tarifs transformations{% endblock %}
 {% block content %}
@@ -6,7 +5,7 @@
 
 <div class="bg-white rounded shadow p-4 mb-6">
     <h2 class="font-semibold mb-2">Ajouter un tarif de transformation</h2>
-    <form action="/admin/tarifs/transformations/create" method="post" class="grid grid-cols-1 md:grid-cols-6 gap-4 text-sm">
+    <form action="/admin/tarifs/transformations/create" method="post" class="grid grid-cols-1 md:grid-cols-7 gap-4 text-sm">
         <div>
             <label class="block text-xs font-medium mb-1">Catégorie</label>
             <input type="text" name="categorie" required class="w-full border rounded px-2 py-1" placeholder="Décolleté devant">
@@ -27,6 +26,10 @@
         <div>
             <label class="block text-xs font-medium mb-1">Épaisseur / option</label>
             <input type="text" name="epaisseur_ou_option" class="w-full border rounded px-2 py-1" placeholder="2 épaisseurs, Boléro...">
+        </div>
+        <div>
+            <label class="block text-xs font-medium mb-1">Nb épaisseurs</label>
+            <input type="number" min="0" name="nb_epaisseurs" class="w-full border rounded px-2 py-1" placeholder="1, 2, 3...">
         </div>
         <div>
             <label class="block text-xs font-medium mb-1">Prix (€)</label>
@@ -50,7 +53,7 @@
                 "Ceinture possible" uniquement pour Découpe devant.
             </p>
         </div>
-        <div class="md:col-span-6 flex justify-end">
+        <div class="md:col-span-7 flex justify-end">
             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
                 Ajouter
             </button>
@@ -66,6 +69,7 @@
             <th class="px-2 py-2 text-left">Finition</th>
             <th class="px-2 py-2 text-left">Modèle</th>
             <th class="px-2 py-2 text-left">Épaisseur / option</th>
+            <th class="px-2 py-2 text-left">Nb épaisseurs</th>
             <th class="px-2 py-2 text-left">Prix</th>
             <th class="px-2 py-2 text-left">Décolleté ?</th>
             <th class="px-2 py-2 text-left">Ceinture ok ?</th>
@@ -92,6 +96,9 @@
                     </td>
                     <td class="px-2 py-1">
                         <input type="text" name="epaisseur_ou_option" value="{{ t.epaisseur_ou_option or '' }}" class="w-full border rounded px-1 py-0.5">
+                    </td>
+                    <td class="px-2 py-1">
+                        <input type="number" min="0" name="nb_epaisseurs" value="{{ t.nb_epaisseurs or '' }}" class="w-full border rounded px-1 py-0.5">
                     </td>
                     <td class="px-2 py-1">
                         <input type="number" step="0.01" name="prix" value="{{ t.prix }}" class="w-full border rounded px-1 py-0.5">
