@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +6,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-
 </head>
 <body class="bg-gray-100 text-gray-800">
 <div class="min-h-screen flex">
@@ -41,11 +39,15 @@
                     Finitions supplémentaires
                 </a>
                 <a href="/admin/produits/mesures"
-                    class="block px-3 py-2 rounded text-sm {% if sous_page=='mesures' %}bg-gray-200 text-gray-900 font-semibold{% else %}hover:bg-gray-100{% endif %}">
-                        Types de mesures
+                   class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='mesures' else 'hover:bg-gray-100' }}">
+                    Types de mesures
                 </a>
                 <a href="/admin/produits/accessoires" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='accessoires' else 'hover:bg-gray-100' }}">
                     Accessoires
+                </a>
+                <a href="/admin/dentelles"
+                   class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if sous_page=='dentelles' else 'hover:bg-gray-100' }}">
+                    Dentelles
                 </a>
             </div>
         </nav>

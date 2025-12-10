@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Dentelles{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Dentelles</h1>
+
+<div class="bg-white rounded shadow p-4 mb-6">
+    <h2 class="font-semibold mb-2">Ajouter une dentelle</h2>
+    <form action="/admin/dentelles/create" method="post" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium mb-1">Nom de la dentelle</label>
+            <input
+                type="text"
+                name="nom"
+                required
+                class="w-full border rounded px-2 py-1"
+                placeholder="Alpha, Beta, Gamma..."
+            >
+        </div>
+        <div class="flex items-center gap-2">
+            <label class="inline-flex items-center text-xs">
+                <input type="checkbox" name="actif" class="mr-1" checked>
+                Active
+            </label>
+        </div>
+        <div class="md:col-span-3 flex justify-end">
+            <button
+                type="submit"
+                class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+                Ajouter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white rounded shadow overflow-auto">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50">
+        <tr>
+            <th class="px-2 py-2 text-left">Nom</th>
+            <th class="px-2 py-2 text-left">Active ?</th>
+            <th class="px-2 py-2 text-right"></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for d in dentelles %}
+            <tr class="border-t">
+                <form action="/admin/dentelles/{{ d.id }}/update" method="post">
+                    <td class="px-2 py-1">
+                        <input
+                            type="text"
+                            name="nom"
+                            value="{{ d.nom }}"
+                            class="w-full border rounded px-1 py-0.5"
+                        >
+                    </td>
+                    <td class="px-2 py-1">
+                        <label class="inline-flex items-center">
+                            <input
+                                type="checkbox"
+                                name="actif"
+                                class="mr-1"
+                                {% if d.actif %}checked{% endif %}
+                            >
+                            <span class="text-xs">Active</span>
+                        </label>
+                    </td>
+                    <td class="px-2 py-1 text-right whitespace-nowrap">
+                        <button
+                            type="submit"
+                            class="text-blue-600 mr-3"
+                        >
+                            Sauver
+                        </button>
+                </form>
+                        <form
+                            action="/admin/dentelles/{{ d.id }}/delete"
+                            method="post"
+                            class="inline"
+                        >
+                            <button
+                                type="submit"
+                                class="text-red-600"
+                                onclick="return confirm('Supprimer cette dentelle ?');"
+                            >
+                                Supprimer
+                            </button>
+                        </form>
+                    </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

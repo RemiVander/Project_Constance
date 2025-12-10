@@ -155,7 +155,6 @@ def boutique_create(
 ):
     existing = db.query(models.Boutique).filter(models.Boutique.email == email).first()
     if existing:
-        # on pourrait renvoyer une erreur, pour l'instant on revient à la liste
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
     plain_password = secrets.token_urlsafe(8)
@@ -220,11 +219,6 @@ def boutique_detail(
         .all()
     )
 
-    total_ca = sum(d.prix_total for d in devis)
-    nb_devis = len(devis)
-    nb_acceptes = len([d for d in devis if d.statut == models.StatutDevis.ACCEPTE])
-    taux_acceptation = (nb_acceptes / nb_devis * 100) if nb_devis else 0
-
     return templates.TemplateResponse(
         "admin_boutique_detail.html",
         {
@@ -232,37 +226,13 @@ def boutique_detail(
             "admin": admin,
             "boutique": boutique,
             "devis": devis,
-            "total_ca": total_ca,
-            "nb_devis": nb_devis,
-            "nb_acceptes": nb_acceptes,
-            "taux_acceptation": taux_acceptation,
             "page": "boutiques",
         },
     )
 
 
-@router.get("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
-def edit_boutique_form(
-    boutique_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    boutique = db.query(models.Boutique).get(boutique_id)
-    if not boutique:
-        return RedirectResponse(url="/admin/boutiques", status_code=302)
-
-    return templates.TemplateResponse(
-        "admin_boutique_edit.html",
-        {
-            "request": request,
-            "boutique": boutique,
-            "page": "boutiques",
-        },
-    )
-
-
-@router.post("/admin/boutiques/{boutique_id}/edit", dependencies=[Depends(require_admin)])
-def edit_boutique(
+@router.post("/admin/boutiques/{boutique_id}/edit")
+def boutique_edit(
     boutique_id: int,
     request: Request,
     nom: str = Form(...),
@@ -370,16 +340,7 @@ def list_tarifs_transformations(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    tarifs = (
-        db.query(models.TransformationTarif)
-        .outerjoin(models.RobeModele, models.TransformationTarif.robe_modele_id == models.RobeModele.id)
-        .order_by(
-            models.TransformationTarif.categorie,
-            models.RobeModele.nom,
-            models.TransformationTarif.finition,
-        )
-        .all()
-    )
+    tarifs = db.query(models.TransformationTarif).all()
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
     return templates.TemplateResponse(
         "admin_tarifs_transformations.html",
@@ -401,34 +362,26 @@ def create_tarif_transformation(
     finition: str = Form(""),
     robe_modele_id: int = Form(0),
     epaisseur_ou_option: str = Form(""),
+    nb_epaisseurs: int = Form(0),
     prix: float = Form(0.0),
     est_decollete: str = Form("off"),
-    ceinture_possible: str = Form("on"),
-    nb_epaisseurs: int = Form(0),
+    ceinture_possible: str = Form("off"),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    # interprétation initiale des cases
-    est_deco_bool = est_decollete == "on"
-    ceinture_bool = ceinture_possible == "on"
-
-    # règle métier : est_decollete ne concerne que Décolleté devant / Décolleté dos
-    if categorie not in ["Décolleté devant", "Décolleté dos"]:
-        est_deco_bool = False
-
-    # règle métier : ceinture_possible ne concerne que Découpe devant
-    if categorie != "Découpe devant":
-        ceinture_bool = True
+    robe_id = robe_modele_id or None
+    if robe_id == 0:
+        robe_id = None
 
     t = models.TransformationTarif(
         categorie=categorie,
         finition=finition or None,
-        robe_modele_id=robe_modele_id or None,
+        robe_modele_id=robe_id,
         epaisseur_ou_option=epaisseur_ou_option or None,
-        prix=prix,
-        est_decollete=est_deco_bool,
-        ceinture_possible=ceinture_bool,
         nb_epaisseurs=nb_epaisseurs or None,
+        prix=prix,
+        est_decollete=True if est_decollete == "on" else False,
+        ceinture_possible=True if ceinture_possible == "on" else False,
     )
     db.add(t)
     db.commit()
@@ -443,10 +396,10 @@ def update_tarif_transformation(
     finition: str = Form(""),
     robe_modele_id: int = Form(0),
     epaisseur_ou_option: str = Form(""),
+    nb_epaisseurs: int = Form(0),
     prix: float = Form(0.0),
     est_decollete: str = Form("off"),
     ceinture_possible: str = Form("off"),
-    nb_epaisseurs: int = Form(0),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -454,23 +407,18 @@ def update_tarif_transformation(
     if not t:
         return RedirectResponse(url="/admin/tarifs/transformations", status_code=302)
 
-    est_deco_bool = est_decollete == "on"
-    ceinture_bool = ceinture_possible == "on"
-
-    if categorie not in ["Décolleté devant", "Décolleté dos"]:
-        est_deco_bool = False
-
-    if categorie != "Découpe devant":
-        ceinture_bool = True
+    robe_id = robe_modele_id or None
+    if robe_id == 0:
+        robe_id = None
 
     t.categorie = categorie
     t.finition = finition or None
-    t.robe_modele_id = robe_modele_id or None
+    t.robe_modele_id = robe_id
     t.epaisseur_ou_option = epaisseur_ou_option or None
-    t.prix = prix
-    t.est_decollete = est_deco_bool
-    t.ceinture_possible = ceinture_bool
     t.nb_epaisseurs = nb_epaisseurs or None
+    t.prix = prix
+    t.est_decollete = True if est_decollete == "on" else False
+    t.ceinture_possible = True if ceinture_possible == "on" else False
 
     db.commit()
     return RedirectResponse(url="/admin/tarifs/transformations", status_code=302)
@@ -498,16 +446,7 @@ def list_tarifs_tissus(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    tarifs = (
-        db.query(models.TissuTarif)
-        .outerjoin(models.RobeModele, models.TissuTarif.robe_modele_id == models.RobeModele.id)
-        .order_by(
-            models.TissuTarif.categorie,
-            models.RobeModele.nom,
-            models.TissuTarif.detail,
-        )
-        .all()
-    )
+    tarifs = db.query(models.TissuTarif).all()
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
     return templates.TemplateResponse(
         "admin_tarifs_tissus.html",
@@ -529,22 +468,26 @@ def create_tarif_tissu(
     robe_modele_id: int = Form(0),
     detail: str = Form(...),
     forme: str = Form(""),
-    prix: float = Form(0.0),
     nb_epaisseurs: int = Form(0),
     mono_epaisseur: str = Form("off"),
     matiere: str = Form(""),
+    prix: float = Form(0.0),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
+    robe_id = robe_modele_id or None
+    if robe_id == 0:
+        robe_id = None
+
     t = models.TissuTarif(
         categorie=categorie,
-        robe_modele_id=robe_modele_id or None,
+        robe_modele_id=robe_id,
         detail=detail,
         forme=forme or None,
-        prix=prix,
         nb_epaisseurs=nb_epaisseurs or None,
         mono_epaisseur=True if mono_epaisseur == "on" else False,
         matiere=matiere or None,
+        prix=prix,
     )
     db.add(t)
     db.commit()
@@ -559,10 +502,10 @@ def update_tarif_tissu(
     robe_modele_id: int = Form(0),
     detail: str = Form(...),
     forme: str = Form(""),
-    prix: float = Form(0.0),
     nb_epaisseurs: int = Form(0),
     mono_epaisseur: str = Form("off"),
     matiere: str = Form(""),
+    prix: float = Form(0.0),
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -570,14 +513,18 @@ def update_tarif_tissu(
     if not t:
         return RedirectResponse(url="/admin/tarifs/tissus", status_code=302)
 
+    robe_id = robe_modele_id or None
+    if robe_id == 0:
+        robe_id = None
+
     t.categorie = categorie
-    t.robe_modele_id = robe_modele_id or None
+    t.robe_modele_id = robe_id
     t.detail = detail
     t.forme = forme or None
-    t.prix = prix
     t.nb_epaisseurs = nb_epaisseurs or None
     t.mono_epaisseur = True if mono_epaisseur == "on" else False
     t.matiere = matiere or None
+    t.prix = prix
 
     db.commit()
     return RedirectResponse(url="/admin/tarifs/tissus", status_code=302)
@@ -669,6 +616,102 @@ def delete_finition_supp(
         db.delete(f)
         db.commit()
     return RedirectResponse(url="/admin/finitions_supplementaires", status_code=302)
+
+
+# ========= Produits : dentelles =========
+
+@router.get("/admin/dentelles")
+def admin_dentelles(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    dentelles = db.query(models.Dentelle).order_by(models.Dentelle.nom).all()
+    return templates.TemplateResponse(
+        "admin_dentelles.html",
+        {
+            "request": request,
+            "admin": admin,
+            "dentelles": dentelles,
+            "page": "produits",
+            "sous_page": "dentelles",
+        },
+    )
+
+
+@router.post("/admin/dentelles/create")
+def create_dentelle(
+    request: Request,
+    nom: str = Form(...),
+    actif: str = Form("off"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    actif_bool = actif.lower() in ("on", "true", "1")
+    d = models.Dentelle(nom=nom, actif=actif_bool)
+    db.add(d)
+    db.commit()
+    return RedirectResponse(url="/admin/dentelles", status_code=302)
+
+
+@router.post("/admin/dentelles/{dentelle_id}/update")
+def update_dentelle(
+    dentelle_id: int,
+    request: Request,
+    nom: str = Form(...),
+    actif: str = Form("off"),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    d = db.query(models.Dentelle).get(dentelle_id)
+    if not d:
+        return RedirectResponse(url="/admin/dentelles", status_code=302)
+
+    actif_bool = actif.lower() in ("on", "true", "1")
+    d.nom = nom
+    d.actif = actif_bool
+    db.commit()
+    return RedirectResponse(url="/admin/dentelles", status_code=302)
+
+
+@router.post("/admin/dentelles/{dentelle_id}/delete")
+def delete_dentelle(
+    dentelle_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    d = db.query(models.Dentelle).get(dentelle_id)
+    if d:
+        db.delete(d)
+        db.commit()
+    return RedirectResponse(url="/admin/dentelles", status_code=302)
+
+
+# ========= Produits : types de mesures =========
+
+@router.get("/admin/produits/mesures")
+def list_mesures_types(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    mesures = (
+        db.query(models.MesureType)
+        .order_by(models.MesureType.ordre, models.MesureType.id)
+        .all()
+    )
+    return templates.TemplateResponse(
+        "admin_mesures.html",
+        {
+            "request": request,
+            "admin": admin,
+            "mesures": mesures,
+            "page": "produits",
+            "sous_page": "mesures",
+        },
+    )
+
 
 
 # ========= Produits : accessoires =========

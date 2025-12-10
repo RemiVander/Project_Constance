@@ -1,8 +1,18 @@
 from datetime import datetime
 from enum import Enum
+
+import sqlalchemy as sa
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Float,
-    Enum as SAEnum, ForeignKey, Text, Boolean, func
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Float,
+    Enum as SAEnum,
+    ForeignKey,
+    Text,
+    Boolean,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -29,6 +39,14 @@ class BoutiqueStatut(str, Enum):
     ACTIF = "ACTIF"
     INACTIF = "INACTIF"
     SUSPENDU = "SUSPENDU"
+
+
+class Dentelle(Base):
+    __tablename__ = "dentelles"
+
+    id = sa.Column(sa.Integer, primary_key=True, index=True)
+    nom = sa.Column(sa.String(100), nullable=False, unique=True)
+    actif = sa.Column(sa.Boolean, nullable=False, default=True)
 
 
 class Boutique(Base):
@@ -79,7 +97,6 @@ class TransformationTarif(Base):
     robe_modele_id = Column(Integer, ForeignKey("robe_modeles.id"), nullable=True)
 
     epaisseur_ou_option = Column(String, nullable=True)
-
     prix = Column(Float, default=0.0, nullable=False)
 
     est_decollete = Column(Boolean, default=False, nullable=False)
@@ -100,9 +117,9 @@ class TissuTarif(Base):
     forme = Column(String, nullable=True)
     prix = Column(Float, default=0.0, nullable=False)
 
-    nb_epaisseurs = Column(Integer, nullable=True) 
+    nb_epaisseurs = Column(Integer, nullable=True)
     mono_epaisseur = Column(Boolean, default=False, nullable=False)
-    matiere = Column(String, nullable=True) 
+    matiere = Column(String, nullable=True)
 
     robe_modele = relationship("RobeModele", back_populates="tarifs_tissus")
 
@@ -144,10 +161,29 @@ class Devis(Base):
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
     prix_total = Column(Float, default=0.0, nullable=False)
 
+    # configuration complète du devis (choix tissus, finitions, accessoires, etc.)
+    configuration_json = sa.Column(sa.Text, nullable=True)
+
+    # dentelle choisie
+    dentelle_id = sa.Column(sa.Integer, sa.ForeignKey("dentelles.id"), nullable=True)
+    dentelle = sa.orm.relationship("Dentelle")
+
     boutique = relationship("Boutique", back_populates="devis")
-    lignes = relationship("LigneDevis", back_populates="devis", cascade="all, delete-orphan")
-    mesures = relationship("DevisMesure", back_populates="devis", cascade="all, delete-orphan")
-    bon_commande = relationship("BonCommande", back_populates="devis", uselist=False)
+    lignes = relationship(
+        "LigneDevis",
+        back_populates="devis",
+        cascade="all, delete-orphan",
+    )
+    mesures = relationship(
+        "DevisMesure",
+        back_populates="devis",
+        cascade="all, delete-orphan",
+    )
+    bon_commande = relationship(
+        "BonCommande",
+        back_populates="devis",
+        uselist=False,
+    )
 
 
 class StatutBonCommande(str, Enum):
@@ -168,7 +204,11 @@ class BonCommande(Base):
     montant_boutique_ttc = Column(Float, default=0.0, nullable=False)
     has_tva = Column(Boolean, default=False, nullable=False)
 
-    statut = Column(SAEnum(StatutBonCommande), default=StatutBonCommande.EN_ATTENTE_VALIDATION, nullable=False)
+    statut = Column(
+        SAEnum(StatutBonCommande),
+        default=StatutBonCommande.EN_ATTENTE_VALIDATION,
+        nullable=False,
+    )
     commentaire_admin = Column(Text, nullable=True)
 
     devis = relationship("Devis", back_populates="bon_commande")
@@ -210,7 +250,7 @@ class DevisMesure(Base):
     id = Column(Integer, primary_key=True, index=True)
     devis_id = Column(Integer, ForeignKey("devis.id", ondelete="CASCADE"), nullable=False)
     mesure_type_id = Column(Integer, ForeignKey("mesure_types.id"), nullable=False)
-    valeur = Column(Float, nullable=True) 
+    valeur = Column(Float, nullable=True)
 
     devis = relationship("Devis", back_populates="mesures")
     mesure_type = relationship("MesureType")
