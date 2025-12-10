@@ -49,12 +49,19 @@ type Accessoire = {
   prix: number;
 };
 
+type Dentelle = {
+  id: number;
+  nom: string;
+  actif?: boolean;
+};
+
 type OptionsResponse = {
   robe_modeles: RobeModele[];
   tarifs_transformations: TransformationTarif[];
   tarifs_tissus: TissuTarif[];
   finitions_supplementaires: FinitionSupp[];
   accessoires: Accessoire[];
+  dentelles: Dentelle[];
 };
 
 type ComboTaille =
@@ -67,6 +74,7 @@ type ComboTaille =
 
 export default function NouveauDevisPage() {
   const router = useRouter();
+
   const [options, setOptions] = useState<OptionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,6 +100,12 @@ export default function NouveauDevisPage() {
   const [finitionsIds, setFinitionsIds] = useState<number[]>([]);
   const [accessoiresIds, setAccessoiresIds] = useState<number[]>([]);
 
+  // Dentelle (obligatoire mais peut être "Aucune")
+  // ""     = pas encore choisi (invalide)
+  // "none" = choix explicite "Aucune dentelle"
+  // "12"   = id de dentelle
+  const [dentelleChoice, setDentelleChoice] = useState<string>("");
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [invalidFields, setInvalidFields] = useState<string[]>([]);
@@ -100,14 +114,16 @@ export default function NouveauDevisPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = (await apiFetch("/api/boutique/options")) as OptionsResponse;
+        const data = (await apiFetch(
+          "/api/boutique/options"
+        )) as OptionsResponse;
         setOptions(data);
       } catch (err: any) {
-        if (err.message?.includes("401")) {
+        if (err?.message?.includes("401")) {
           router.push("/login");
           return;
         }
-        setLoadError(err.message || "Erreur lors du chargement des options");
+        setLoadError(err?.message || "Erreur lors du chargement des options");
       } finally {
         setLoading(false);
       }
@@ -148,76 +164,69 @@ export default function NouveauDevisPage() {
 
   const tissuDevant = useMemo(
     () => getTissuById(tissuDevantId),
-    [tissuDevantId, options],
+    [tissuDevantId, options]
   );
   const tissuDos = useMemo(
     () => getTissuById(tissuDosId),
-    [tissuDosId, options],
+    [tissuDosId, options]
   );
   const tissuBas = useMemo(
     () => getTissuById(tissuBasId),
-    [tissuBasId, options],
+    [tissuBasId, options]
   );
 
-  // Nb d'épaisseurs pour les découpes (référence tissus)
   const nbDecoupeDevant = decoupeDevant?.nb_epaisseurs ?? null;
   const nbDecoupeDos = decoupeDos?.nb_epaisseurs ?? null;
 
-  // Double décolleté
   const doubleDecolleteAlerte = useMemo(
     () => decDevant?.est_decollete && decDos?.est_decollete,
-    [decDevant, decDos],
+    [decDevant, decDos]
   );
 
   // --- Filtres transformations / tissus ---
 
-  // Découpe devant : même nb d’épaisseurs que le décolleté devant (si renseigné)
   function filterDecoupeDevantOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe devant",
+        (t) => t.categorie === "Découpe devant"
       ) ?? [];
     const nbDecolleteDevant = decDevant?.nb_epaisseurs;
     if (typeof nbDecolleteDevant === "number") {
       list = list.filter(
         (t) =>
           typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecolleteDevant,
+          t.nb_epaisseurs === nbDecolleteDevant
       );
     }
     return list;
   }
 
-  // Décolleté dos : ne peut pas avoir plus d'épaisseurs que le décolleté devant
   function filterDecolleteDosOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Décolleté dos",
+        (t) => t.categorie === "Décolleté dos"
       ) ?? [];
     const nbDev = decDevant?.nb_epaisseurs;
     if (typeof nbDev === "number") {
       list = list.filter(
         (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
       );
     }
     return list;
   }
 
-  // Découpe dos :
-  // - nb d'épaisseurs <= découpe devant
-  // - ET nb d'épaisseurs = décolleté dos (si renseigné)
   function filterDecoupeDosOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe dos",
+        (t) => t.categorie === "Découpe dos"
       ) ?? [];
 
     const nbDev = decoupeDevant?.nb_epaisseurs;
     if (typeof nbDev === "number") {
       list = list.filter(
         (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
       );
     }
 
@@ -226,7 +235,7 @@ export default function NouveauDevisPage() {
       list = list.filter(
         (t) =>
           typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecolleteDos,
+          t.nb_epaisseurs === nbDecolleteDos
       );
     }
 
@@ -239,7 +248,6 @@ export default function NouveauDevisPage() {
     );
   }
 
-  // Tissu bas : nb épaisseurs STRICTEMENT ÉGAL au bas
   function filterTissusBas() {
     let list =
       options?.tarifs_tissus.filter((t) => t.categorie === "Bas") ?? [];
@@ -247,31 +255,29 @@ export default function NouveauDevisPage() {
     if (nbBas != null) {
       list = list.filter(
         (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs === nbBas,
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs === nbBas
       );
     }
     return list;
   }
+function filterTissusDevant() {
+  let list =
+    options?.tarifs_tissus.filter(
+      (t) => t.categorie && t.categorie.toLowerCase() === "devant"
+    ) ?? [];
 
-  // Tissu devant : nb épaisseurs STRICTEMENT ÉGAL à la découpe devant
-  function filterTissusDevant() {
-    let list =
-      options?.tarifs_tissus.filter((t) => t.categorie === "devant") ?? [];
-
-    if (nbDecoupeDevant != null) {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecoupeDevant,
-      );
-    }
-
-    return list;
+  if (nbDecoupeDevant != null) {
+    list = list.filter(
+      (t) =>
+        typeof t.nb_epaisseurs === "number" &&
+        t.nb_epaisseurs === nbDecoupeDevant
+    );
   }
 
-  // Tissu dos : nb épaisseurs STRICTEMENT ÉGAL à la découpe dos
-  // + pas plus d'épaisseurs que le tissu devant
-  // + crêpe dos seulement si devant est en crêpe
+  return list;
+}
+
+
   function filterTissusDos() {
     let list =
       options?.tarifs_tissus.filter((t) => t.categorie === "Dos") ?? [];
@@ -280,7 +286,7 @@ export default function NouveauDevisPage() {
       list = list.filter(
         (t) =>
           typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecoupeDos,
+          t.nb_epaisseurs === nbDecoupeDos
       );
     }
 
@@ -288,7 +294,7 @@ export default function NouveauDevisPage() {
       const nbDev = tissuDevant.nb_epaisseurs;
       list = list.filter(
         (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev,
+          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
       );
     }
 
@@ -323,17 +329,17 @@ export default function NouveauDevisPage() {
     addT(basId);
 
     const ceintureTransfo = options.tarifs_transformations.find(
-      (t) => t.categorie === "Ceinture",
+      (t) => t.categorie === "Ceinture"
     );
     const remontDevantTransfo = options.tarifs_transformations.find(
       (t) =>
         t.categorie === "Découpe taille devant et dos" &&
-        t.epaisseur_ou_option === "Remonté devant",
+        t.epaisseur_ou_option === "Remonté devant"
     );
     const echancreDosTransfo = options.tarifs_transformations.find(
       (t) =>
         t.categorie === "Découpe taille devant et dos" &&
-        t.epaisseur_ou_option === "Échancré dos",
+        t.epaisseur_ou_option === "Échancré dos"
     );
 
     switch (comboTaille) {
@@ -374,8 +380,9 @@ export default function NouveauDevisPage() {
       if (a) total += a.prix;
     }
 
+    // Housse automatiquement incluse si présente dans les accessoires
     const housse = options.accessoires.find((a) =>
-      a.nom.toLowerCase().includes("housse"),
+      a.nom.toLowerCase().includes("housse")
     );
     if (housse) total += housse.prix;
 
@@ -397,7 +404,7 @@ export default function NouveauDevisPage() {
     comboTaille,
   ]);
 
-  // --- UI erreurs & helpers communs ---
+  // --- UI erreurs & helpers ---
 
   const hasError = (key: string) => invalidFields.includes(key);
 
@@ -426,6 +433,11 @@ export default function NouveauDevisPage() {
     if (!tissuDevantId) newInvalid.push("tissuDevant");
     if (!tissuBasId) newInvalid.push("tissuBas");
     if (hasManches && !tissuManchesId) newInvalid.push("tissuManches");
+
+    // Dentelle obligatoire (doit choisir soit "none" soit une vraie dentelle)
+    if (!dentelleChoice) {
+      newInvalid.push("dentelle");
+    }
 
     // Décolleté devant & Découpe devant : même nb d'épaisseurs
     if (
@@ -511,7 +523,7 @@ export default function NouveauDevisPage() {
     if (newInvalid.length > 0 || coutInterneTotal <= 0) {
       setInvalidFields([...new Set(newInvalid)]);
       setSaveError(
-        "Merci de remplir tous les champs requis et de corriger les incohérences.",
+        "Merci de remplir tous les champs requis et de corriger les incohérences."
       );
       return;
     }
@@ -519,7 +531,13 @@ export default function NouveauDevisPage() {
     setInvalidFields([]);
     setSaveError(null);
 
-    // Description lisible
+    // Conversion de la dentelle choisie en id numérique ou null
+    const selectedDentelleId =
+      dentelleChoice === "none" || dentelleChoice === ""
+        ? null
+        : Number(dentelleChoice);
+
+    // Description lisible pour la ligne de devis
     const parts: string[] = [];
 
     const addTDesc = (label: string, id: number | null) => {
@@ -571,11 +589,31 @@ export default function NouveauDevisPage() {
     addTiDesc("Tissu bas", tissuBasId);
 
     const housse = options.accessoires.find((a) =>
-      a.nom.toLowerCase().includes("housse"),
+      a.nom.toLowerCase().includes("housse")
     );
     if (housse) {
       parts.push("Housse de protection incluse");
     }
+
+    if (selectedDentelleId) {
+      const d = options.dentelles.find((dd) => dd.id === selectedDentelleId);
+      if (d) {
+        parts.push(`Dentelle : ${d.nom}`);
+      }
+    } else if (dentelleChoice === "none") {
+      parts.push("Aucune dentelle (confirmé par la boutique)");
+    }
+
+    // Finitions supplémentaires (dont la fente)
+  if (finitionsIds.length > 0) {
+    for (const id of finitionsIds) {
+      const f = options.finitions_supplementaires.find((x) => x.id === id);
+      if (f) {
+        parts.push(`Finition : ${f.nom}`);
+      }
+    }
+  }
+
 
     const description =
       parts.length > 0 ? parts.join(" | ") : "Robe de mariée sur mesure";
@@ -585,6 +623,7 @@ export default function NouveauDevisPage() {
       const created = (await apiFetch("/api/boutique/devis", {
         method: "POST",
         body: JSON.stringify({
+          dentelle_id: selectedDentelleId,
           lignes: [
             {
               robe_modele_id: null,
@@ -596,11 +635,15 @@ export default function NouveauDevisPage() {
         }),
       })) as any;
 
-      if (created?.id) router.push(`/devis/${created.id}/confirmation`);
-      else router.push("/dashboard");
+      if (created?.id) {
+        router.push(`/devis/${created.id}/confirmation`);
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setSaveError(
-        err.message || "Erreur lors de la création du devis. Veuillez réessayer.",
+        err?.message ||
+          "Erreur lors de la création du devis. Veuillez réessayer."
       );
     } finally {
       setSaving(false);
@@ -615,8 +658,6 @@ export default function NouveauDevisPage() {
         {loadError && <p className="text-xs">{loadError}</p>}
       </div>
     );
-
-  // --- Rendu ---
 
   return (
     <div className="space-y-6">
@@ -658,7 +699,6 @@ export default function NouveauDevisPage() {
                 setDecDevantId(newId);
                 clearFieldError(["decDevant", "decoupeDevant", "decDos"]);
 
-                // Reset découpe devant si non compatible en nb d'épaisseurs
                 const newTransfo = getTransfoById(newId);
                 const nbNew = newTransfo?.nb_epaisseurs;
                 if (typeof nbNew === "number") {
@@ -701,7 +741,7 @@ export default function NouveauDevisPage() {
               value={decoupeDevantId ?? ""}
               onChange={(e) => {
                 setDecoupeDevantId(
-                  e.target.value ? Number(e.target.value) : null,
+                  e.target.value ? Number(e.target.value) : null
                 );
                 clearFieldError([
                   "decoupeDevant",
@@ -744,12 +784,8 @@ export default function NouveauDevisPage() {
               <option value="REMONT_DEVANT_ECHANTRE_DOS">
                 Remonté devant + échancré dos
               </option>
-              <option value="REMONT_DEVANT_SEULE">
-                Remonté devant seul
-              </option>
-              <option value="ECHANCRE_DOS_SEUL">
-                Échancré dos seul
-              </option>
+              <option value="REMONT_DEVANT_SEULE">Remonté devant seul</option>
+              <option value="ECHANCRE_DOS_SEUL">Échancré dos seul</option>
             </select>
           </div>
 
@@ -796,7 +832,7 @@ export default function NouveauDevisPage() {
                 value={tissuManchesId ?? ""}
                 onChange={(e) => {
                   setTissuManchesId(
-                    e.target.value ? Number(e.target.value) : null,
+                    e.target.value ? Number(e.target.value) : null
                   );
                   clearFieldError("tissuManches");
                 }}
@@ -853,7 +889,7 @@ export default function NouveauDevisPage() {
               value={tissuDevantId ?? ""}
               onChange={(e) => {
                 setTissuDevantId(
-                  e.target.value ? Number(e.target.value) : null,
+                  e.target.value ? Number(e.target.value) : null
                 );
                 clearFieldError(["tissuDevant", "tissuDos"]);
               }}
@@ -880,9 +916,7 @@ export default function NouveauDevisPage() {
               className={classFor("tissuBas")}
               value={tissuBasId ?? ""}
               onChange={(e) => {
-                setTissuBasId(
-                  e.target.value ? Number(e.target.value) : null,
-                );
+                setTissuBasId(e.target.value ? Number(e.target.value) : null);
                 clearFieldError(["tissuBas", "bas"]);
               }}
             >
@@ -924,7 +958,6 @@ export default function NouveauDevisPage() {
                 setDecDosId(newId);
                 clearFieldError(["decDevant", "decDos", "decoupeDos"]);
 
-                // Reset découpe dos si non compatible en nb d'épaisseurs
                 const newTransfo = getTransfoById(newId);
                 const nbNew = newTransfo?.nb_epaisseurs;
                 if (typeof nbNew === "number") {
@@ -965,9 +998,14 @@ export default function NouveauDevisPage() {
               value={decoupeDosId ?? ""}
               onChange={(e) => {
                 setDecoupeDosId(
-                  e.target.value ? Number(e.target.value) : null,
+                  e.target.value ? Number(e.target.value) : null
                 );
-                clearFieldError(["decoupeDevant", "decoupeDos", "tissuDos", "decDos"]);
+                clearFieldError([
+                  "decoupeDevant",
+                  "decoupeDos",
+                  "tissuDos",
+                  "decDos",
+                ]);
               }}
             >
               <option value="">Aucune</option>
@@ -1033,14 +1071,14 @@ export default function NouveauDevisPage() {
                             .map((x) => x.id);
 
                           newList = newList.filter(
-                            (id) => !autres.includes(id),
+                            (id) => !autres.includes(id)
                           );
                         }
 
                         setFinitionsIds(newList);
                       } else {
                         setFinitionsIds(
-                          finitionsIds.filter((id) => id !== f.id),
+                          finitionsIds.filter((id) => id !== f.id)
                         );
                       }
                     }}
@@ -1053,7 +1091,9 @@ export default function NouveauDevisPage() {
 
           {/* Accessoires */}
           <div className="mt-4">
-            <label className="block text-sm font-medium mb-1">Accessoires</label>
+            <label className="block text-sm font-medium mb-1">
+              Accessoires
+            </label>
             <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
               {options.accessoires.map((a) => {
                 const isHousse = a.nom.toLowerCase().includes("housse");
@@ -1070,7 +1110,7 @@ export default function NouveauDevisPage() {
                           setAccessoiresIds([...accessoiresIds, a.id]);
                         } else {
                           setAccessoiresIds(
-                            accessoiresIds.filter((id) => id !== a.id),
+                            accessoiresIds.filter((id) => id !== a.id)
                           );
                         }
                       }}
@@ -1086,10 +1126,47 @@ export default function NouveauDevisPage() {
         </div>
       </div>
 
+      {/* Dentelle */}
+      <div className="border rounded-xl p-4 bg-white">
+        <h2 className="font-semibold mb-3">Dentelle</h2>
+
+        <label className="block text-sm font-medium mb-1">
+          Choix de la dentelle <span className="text-red-500">*</span>
+        </label>
+        <select
+          className={classFor("dentelle")}
+          value={dentelleChoice}
+          onChange={(e) => {
+            const val = e.target.value;
+            setDentelleChoice(val);
+            clearFieldError("dentelle");
+          }}
+        >
+          <option value="">-- Sélectionnez une option --</option>
+          <option value="none">Aucune dentelle</option>
+          {options.dentelles
+            ?.filter(
+              (d) =>
+                d.actif === undefined || d.actif === true
+            )
+            .map((d) => (
+              <option key={d.id} value={String(d.id)}>
+                {d.nom}
+              </option>
+            ))}
+        </select>
+
+        {dentelleChoice === "none" && (
+          <p className="mt-2 text-xs text-amber-700">
+            Veuillez vous assurer que votre robe ne comporte pas de dentelle.
+          </p>
+        )}
+      </div>
+
       {/* Alerte double décolleté */}
       {doubleDecolleteAlerte && (
         <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">
-          Attention : décolleté devant + décolleté dos est déconseillé.
+          Attention : la présence d&apos;un décolleté devant et d&apos;un décolleté dos est déconseillée.
         </div>
       )}
 
