@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { Breadcrumb } from "@/components/Breadcrumb";
 
-interface BonCommande {
+type BonCommande = {
   id: number;
   devis_id: number;
   numero_devis: number;
@@ -13,75 +12,49 @@ interface BonCommande {
   montant_boutique_ht: number;
   montant_boutique_ttc: number;
   has_tva: boolean;
-  // si tu ajoutes ces champs côté API plus tard :
-  statut?: string;
+  statut: string;
   commentaire_admin?: string | null;
-}
+};
 
 export default function BonsCommandePage() {
   const router = useRouter();
   const [bons, setBons] = useState<BonCommande[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setErrorMsg(null);
       try {
         const data = (await apiFetch(
           "/api/boutique/bons-commande"
         )) as BonCommande[];
         setBons(data || []);
-      } catch (err: any) {
-        // si non connecté → redirection login
-        if (err?.message?.includes("401")) {
-          router.push("/login");
-          return;
-        }
-        setError(
-          err?.message || "Erreur lors du chargement des bons de commande"
-        );
+      } catch (e: any) {
+        setErrorMsg(e?.message || "Erreur lors du chargement des bons.");
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [router]);
+  }, []);
 
-  const formatDate = (iso?: string | null) => {
-    if (!iso) return "-";
-    const d = new Date(iso);
-    return d.toLocaleDateString("fr-FR");
-  };
+  const formatDate = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleDateString("fr-FR") : "-";
 
-  const formatStatut = (statut?: string) => {
-    if (!statut) return "En attente de validation";
-    switch (statut) {
-      case "EN_ATTENTE_VALIDATION":
-        return "En attente de validation";
-      case "A_MODIFIER":
-        return "À modifier par la boutique";
-      case "VALIDE":
-        return "Validé";
-      case "REFUSE":
-        return "Refusé";
-      default:
-        return statut;
-    }
-  };
-
-  const statutBadgeClass = (statut?: string) => {
+  const statutBadge = (statut: string) => {
     const base =
       "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ";
     switch (statut) {
       case "EN_ATTENTE_VALIDATION":
-      case undefined:
-        return base + "bg-sky-100 text-sky-800";
-      case "A_MODIFIER":
         return base + "bg-amber-100 text-amber-800";
       case "VALIDE":
         return base + "bg-emerald-100 text-emerald-800";
-      case "REFUSE":
+      case "A_MODIFIER":
         return base + "bg-rose-100 text-rose-700";
+      case "REFUSE":
+        return base + "bg-gray-200 text-gray-700";
       default:
         return base + "bg-slate-100 text-slate-700";
     }
@@ -90,26 +63,26 @@ export default function BonsCommandePage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="bg-white rounded shadow p-6">
-          Chargement de vos bons de commande...
+        <div className="bg-white rounded shadow p-4 text-sm text-gray-600">
+          Chargement des bons de commande…
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (errorMsg) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="bg-white rounded shadow p-8 max-w-md w-full text-center">
+        <div className="bg-white rounded shadow p-6 max-w-md w-full text-center">
           <h1 className="text-xl font-semibold mb-2">
-            Une erreur est survenue
+            Impossible de charger les bons de commande
           </h1>
-          <p className="text-sm text-gray-600 mb-4">{error}</p>
+          <p className="text-sm text-gray-600 mb-4">{errorMsg}</p>
           <button
-            onClick={() => router.refresh()}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            onClick={() => router.push("/dashboard")}
+            className="px-4 py-2 rounded bg-gray-900 text-white text-sm font-semibold"
           >
-            Réessayer
+            Retour au tableau de bord
           </button>
         </div>
       </div>
@@ -117,72 +90,101 @@ export default function BonsCommandePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <div className="max-w-5xl mx-auto py-8 px-4">
-        <Breadcrumb
-          items={[
-            { label: "Tableau de bord", href: "/dashboard" },
-            { label: "Mes bons de commande" },
-          ]}
-        />
+    <div className="min-h-screen bg-slate-100 py-10">
+      <div className="max-w-5xl mx-auto bg-white rounded shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-xs text-gray-500">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="underline hover:text-gray-700"
+            >
+              Tableau de bord
+            </button>{" "}
+            / <span className="font-semibold">Mes bons de commande</span>
+          </div>
+        </div>
 
         <h1 className="text-2xl font-bold mb-2">Mes bons de commande</h1>
-        <p className="text-sm text-gray-600 mb-6">
-          Suivez ici l&apos;état de vos bons de commande, les montants et les
-          éventuels commentaires de l&apos;administration.
+        <p className="text-sm text-gray-600 mb-4">
+          Retrouvez ici les bons de commande générés à partir de vos devis.
         </p>
 
         {bons.length === 0 ? (
           <p className="text-sm text-gray-500">
-            Vous n&apos;avez pas encore de bon de commande.
+            Aucun bon de commande pour le moment.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm bg-white rounded shadow">
+            <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="py-2 px-4">Référence devis</th>
-                  <th className="py-2 px-4">Date BC</th>
-                  <th className="py-2 px-4">Statut</th>
-                  <th className="py-2 px-4">Montant boutique TTC</th>
-                  <th className="py-2 px-4">Commentaire admin</th>
-                  <th className="py-2 px-4">Actions</th>
+                  <th className="py-2 pr-4">Devis</th>
+                  <th className="py-2 pr-4">Date</th>
+                  <th className="py-2 pr-4">Montant HT</th>
+                  <th className="py-2 pr-4">Montant TTC</th>
+                  <th className="py-2 pr-4">Statut</th>
+                  <th className="py-2 pr-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {bons.map((bc) => {
-                  const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${bc.devis_id}/bon-commande.pdf`;
+                {bons.map((b) => {
+                  const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${b.devis_id}/bon-commande.pdf`;
+
+                  const montantAPayer = b.has_tva
+                    ? b.montant_boutique_ht
+                    : b.montant_boutique_ttc;
+
+                  const isAModifier = b.statut === "A_MODIFIER";
+
                   return (
-                    <tr key={bc.id} className="border-b align-top">
-                      <td className="py-2 px-4 font-semibold">
-                        #{bc.numero_devis}
+                    <tr key={b.id} className="border-b">
+                      <td className="py-2 pr-4 font-semibold">
+                        #{b.numero_devis}
                       </td>
-                      <td className="py-2 px-4">
-                        {formatDate(bc.date_creation)}
+                      <td className="py-2 pr-4">
+                        {formatDate(b.date_creation)}
                       </td>
-                      <td className="py-2 px-4">
-                        <span className={statutBadgeClass(bc.statut)}>
-                          {formatStatut(bc.statut)}
+                      <td className="py-2 pr-4">
+                        {b.montant_boutique_ht.toFixed(2)} €
+                      </td>
+                      <td className="py-2 pr-4">
+                        {b.montant_boutique_ttc.toFixed(2)} €
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span className={statutBadge(b.statut)}>
+                          {b.statut}
                         </span>
-                      </td>
-                      <td className="py-2 px-4">
-                        {bc.montant_boutique_ttc.toFixed(2)} €
-                      </td>
-                      <td className="py-2 px-4 text-xs text-gray-600 max-w-xs">
-                        {bc.commentaire_admin ? (
-                          <span>{bc.commentaire_admin}</span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
+                        {b.commentaire_admin && (
+                          <div className="mt-1 text-xs text-rose-700">
+                            Commentaire atelier : {b.commentaire_admin}
+                          </div>
                         )}
                       </td>
-                      <td className="py-2 px-4">
+                      <td className="py-2 pr-4 space-y-1">
                         <a
                           href={pdfUrl}
                           target="_blank"
-                          className="text-xs text-blue-600 underline"
+                          rel="noopener noreferrer"
+                          className="inline-flex text-xs px-3 py-1 rounded bg-gray-900 text-white"
                         >
                           PDF bon de commande
                         </a>
+
+                        {isAModifier && (
+                          <button
+                            onClick={() =>
+                              router.push(`/devis/${b.devis_id}/corriger`)
+                            }
+                            className="block w-full text-xs px-3 py-1 rounded border border-amber-500 text-amber-700 hover:bg-amber-50"
+                          >
+                            Corriger le bon
+                          </button>
+                        )}
+
+                        <div className="text-[11px] text-gray-500">
+                          Montant à payer : {montantAPayer.toFixed(2)} €
+                          {b.has_tva ? " (HT)" : " (TTC)"}
+                        </div>
                       </td>
                     </tr>
                   );

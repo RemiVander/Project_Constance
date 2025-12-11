@@ -210,6 +210,7 @@ class BonCommande(Base):
         nullable=False,
     )
     commentaire_admin = Column(Text, nullable=True)
+    commentaire_boutique = Column(Text, nullable=True)
 
     devis = relationship("Devis", back_populates="bon_commande")
 

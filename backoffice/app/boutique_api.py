@@ -8,6 +8,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from .pdf_utils import generate_pdf_devis_bon
+
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -131,7 +133,9 @@ class DevisPublic(BaseModel):
     prix_client_conseille_ttc: float
     configuration: dict | None = None
     dentelle_id: int | None = None
-    lignes: Optional[List[LigneDevisPublic]] = None
+    lignes: Optional[List["LigneDevisPublic"]] = None
+    # NEW : mesures pour pré-remplir la page de correction
+    mesures: Optional[List["MesureValeurPublic"]] = None
 
     model_config = {"from_attributes": True}
 
@@ -146,6 +150,13 @@ class MesureTypePublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MesureValeurPublic(BaseModel):
+    mesure_type_id: int
+    valeur: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class MesureValeurPayload(BaseModel):
     mesure_type_id: int
     valeur: float
@@ -154,6 +165,7 @@ class MesureValeurPayload(BaseModel):
 class UpdateDevisStatutPayload(BaseModel):
     statut: Literal["EN_COURS", "ACCEPTE", "REFUSE"]
     mesures: Optional[List[MesureValeurPayload]] = None
+
 
 
 class ChangePasswordRequest(BaseModel):
@@ -171,6 +183,7 @@ class BonCommandePublic(BaseModel):
     has_tva: bool
     statut: str
     commentaire_admin: Optional[str] = None
+    commentaire_boutique: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -256,6 +269,16 @@ def build_devis_public(
             for l in (devis.lignes or [])
         ]
 
+    mesures_public: Optional[List[MesureValeurPublic]] = None
+    if include_lignes and getattr(devis, "mesures", None):
+        mesures_public = [
+            MesureValeurPublic(
+                mesure_type_id=m.mesure_type_id,
+                valeur=m.valeur,
+            )
+            for m in devis.mesures
+        ]
+
     config_data: dict | None = None
     raw_config = getattr(devis, "configuration_json", None)
     if raw_config:
@@ -275,7 +298,9 @@ def build_devis_public(
         configuration=config_data,
         dentelle_id=devis.dentelle_id,
         lignes=lignes_public,
+        mesures=mesures_public,
     )
+
 
 
 # =========================
@@ -524,18 +549,24 @@ def update_devis(
     db: Session = Depends(get_db),
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
-    devis = (
+    """
+    Edition d'un devis existant (lignes + configuration + dentelle).
+
+    On n'autorise l'édition que si le devis appartient à la boutique
+    et qu'il n'est pas REFUSE ou ACCEPTE.
+    """
+    d = (
         db.query(models.Devis)
         .filter(models.Devis.id == devis_id, models.Devis.boutique_id == boutique.id)
         .first()
     )
-    if not devis:
+    if not d:
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
-    if devis.statut == models.StatutDevis.ACCEPTE:
+    if d.statut in (models.StatutDevis.ACCEPTE, models.StatutDevis.REFUSE):
         raise HTTPException(
             status_code=400,
-            detail="Impossible de modifier un devis déjà accepté.",
+            detail="Impossible de modifier un devis déjà accepté ou refusé.",
         )
 
     if not payload.lignes:
@@ -544,13 +575,22 @@ def update_devis(
             detail="Le devis doit contenir au moins une ligne",
         )
 
-    devis.lignes.clear()
-    db.flush()
+    # Mise à jour configuration + dentelle
+    d.configuration_json = (
+        json.dumps(payload.configuration)
+        if payload.configuration is not None
+        else None
+    )
+    d.dentelle_id = payload.dentelle_id
+
+    db.query(models.LigneDevis).filter(
+        models.LigneDevis.devis_id == d.id
+    ).delete()
 
     total = 0.0
     for ligne in payload.lignes:
         l = models.LigneDevis(
-            devis_id=devis.id,
+            devis_id=d.id,
             robe_modele_id=ligne.robe_modele_id,
             description=ligne.description or None,
             quantite=ligne.quantite,
@@ -559,20 +599,12 @@ def update_devis(
         db.add(l)
         total += ligne.quantite * ligne.prix_unitaire
 
-    devis.prix_total = total
-    devis.configuration_json = (
-        json.dumps(payload.configuration)
-        if payload.configuration is not None
-        else None
-    )
-    devis.dentelle_id = payload.dentelle_id
-    devis.statut = models.StatutDevis.EN_COURS
-
+    d.prix_total = total
+    d.statut = models.StatutDevis.EN_COURS 
     db.commit()
-    db.refresh(devis)
+    db.refresh(d)
 
-    return build_devis_public(devis, boutique, include_lignes=True)
-
+    return build_devis_public(d, boutique, include_lignes=True)
 
 # =========================
 # Types de mesures
@@ -589,6 +621,86 @@ def list_mesure_types(
         .all()
     )
     return types
+
+# =========================
+# Mesures d'un devis (correction bon de commande)
+# =========================
+
+class UpdateDevisMesuresPayload(BaseModel):
+    mesures: List[MesureValeurPayload]
+
+
+@router.put("/devis/{devis_id}/mesures", response_model=DevisPublic)
+def update_devis_mesures(
+    devis_id: int,
+    payload: UpdateDevisMesuresPayload,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    """
+    Utilisé par la page de correction de bon de commande :
+    - met à jour les mesures du devis
+    - recalcule le montant du bon de commande
+    - remet le bon en EN_ATTENTE_VALIDATION
+    """
+
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
+        )
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    # On remplace toutes les mesures
+    devis.mesures.clear()
+    db.flush()
+
+    for m in payload.mesures:
+        dm = models.DevisMesure(
+            devis_id=devis.id,
+            mesure_type_id=m.mesure_type_id,
+            valeur=m.valeur,
+        )
+        db.add(dm)
+
+    # Recalcul des montants pour le bon de commande
+    prix = compute_prix_boutique_et_client(devis)
+    has_tva = bool(boutique.numero_tva)
+
+    montant_boutique_ht = prix["partenaire_ht"]
+    montant_boutique_ttc = prix["partenaire_ttc"]
+
+    bon = (
+        db.query(models.BonCommande)
+        .filter(models.BonCommande.devis_id == devis.id)
+        .first()
+    )
+
+    if not bon:
+        bon = models.BonCommande(
+            devis_id=devis.id,
+            montant_boutique_ht=montant_boutique_ht,
+            montant_boutique_ttc=montant_boutique_ttc,
+            has_tva=has_tva,
+        )
+        db.add(bon)
+    else:
+        bon.montant_boutique_ht = montant_boutique_ht
+        bon.montant_boutique_ttc = montant_boutique_ttc
+        bon.has_tva = has_tva
+
+    # On remet le bon en attente de validation atelier
+    if hasattr(models, "StatutBonCommande") and hasattr(bon, "statut"):
+        bon.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
+
+    db.commit()
+    db.refresh(devis)
+
+    return build_devis_public(devis, boutique, include_lignes=True)
 
 
 # =========================
@@ -658,9 +770,13 @@ def update_devis_statut(
             bon.montant_boutique_ttc = montant_boutique_ttc
             bon.has_tva = has_tva
 
+        if hasattr(models, "StatutBonCommande") and hasattr(bon, "statut"):
+            bon.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
+
         db.commit()
         db.refresh(devis)
         return build_devis_public(devis, boutique, include_lignes=True)
+
 
     if payload.statut == "REFUSE":
         devis.statut = models.StatutDevis.REFUSE
@@ -673,6 +789,40 @@ def update_devis_statut(
     db.refresh(devis)
     return build_devis_public(devis, boutique, include_lignes=True)
 
+
+@router.get("/bons-commande", response_model=List[BonCommandePublic])
+def list_bons_commande(
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    bons = (
+        db.query(models.BonCommande)
+        .join(models.Devis)
+        .filter(models.Devis.boutique_id == boutique.id)
+        .order_by(models.BonCommande.date_creation.desc())
+        .all()
+    )
+
+    result: List[BonCommandePublic] = []
+
+    for bc in bons:
+        result.append(
+            BonCommandePublic(
+                id=bc.id,
+                devis_id=bc.devis_id,
+                numero_devis=bc.devis.numero_boutique,
+                date_creation=bc.date_creation,
+                montant_boutique_ht=bc.montant_boutique_ht,
+                montant_boutique_ttc=bc.montant_boutique_ttc,
+                has_tva=bc.has_tva,
+                statut=bc.statut.value
+                if hasattr(bc.statut, "value")
+                else str(bc.statut),
+                commentaire_admin=bc.commentaire_admin,
+            )
+        )
+
+    return result
 
 @router.get("/devis/{devis_id}/pdf")
 def get_devis_pdf(
@@ -691,199 +841,58 @@ def get_devis_pdf(
     if not devis:
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
-    # On charge les lignes explicitement (comme dans ton ancienne version)
-    lignes = (
-        db.query(models.LigneDevis)
-        .filter(models.LigneDevis.devis_id == devis.id)
-        .all()
-    )
+    lignes = db.query(models.LigneDevis).filter(
+        models.LigneDevis.devis_id == devis.id
+    ).all()
 
-    # Calcul des montants avec la nouvelle logique (compute_prix_boutique_et_client)
     prix = compute_prix_boutique_et_client(devis)
-    has_tva = bool(boutique.numero_tva)
 
-    partenaire_ht = prix["partenaire_ht"]
-    partenaire_tva = prix["partenaire_tva"]
-    partenaire_ttc = prix["partenaire_ttc"]
-    client_ht = prix["client_ht"]
-    client_tva = prix["client_tva"]
-    client_ttc = prix["client_ttc"]
-
-    montant_a_payer = partenaire_ht if has_tva else partenaire_ttc
-    label_montant = (
-        "Montant à payer par la boutique (HT)"
-        if has_tva
-        else "Montant à payer par la boutique (TTC)"
+    return generate_pdf_devis_bon(
+        devis=devis,
+        boutique=boutique,
+        prix=prix,
+        lignes=lignes,
+        type="devis",
     )
 
-    # ========== GÉNÉRATION DU PDF ==========
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
 
-    y = height - 50
+# =========================
+# PDF Bon de commande
+# =========================
 
-    # LOGO
-    logo_path = os.path.join("app", "static", "logo_bande.png")
-    if os.path.exists(logo_path):
-        c.drawImage(
-            logo_path,
-            50,
-            height - 120,
-            width=350,
-            height=70,
-            preserveAspectRatio=True,
-            mask="auto",
+
+@router.get("/bons-commande/{devis_id}/pdf")
+def get_bon_commande_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(
+            models.Devis.id == devis_id,
+            models.Devis.boutique_id == boutique.id,
         )
-        y = height - 150
-    else:
-        y = height - 50
-
-    # ENTÊTE CONSTANCE
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "SARL Cellier Constance")
-    y -= 14
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, "Siren : 992 306 373")
-    y -= 14
-    c.drawString(50, y, "3, rue Maryse Bastié – 59840 Pérenchies")
-    y -= 24
-
-    # Date
-    if devis.date_creation:
-        c.drawString(50, y, f"Date : {devis.date_creation.strftime('%d/%m/%Y')}")
-    else:
-        c.drawString(50, y, "Date : -")
-    y -= 14
-
-    # Référence devis
-    ref_devis = f"{boutique.nom}-{devis.numero_boutique}"
-    c.drawString(50, y, f"Devis n° : {ref_devis}")
-    y -= 30
-
-    # TITRE
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y, "Devis création robe de mariée")
-    y -= 24
-
-    # Bloc boutique
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Boutique partenaire :")
-    y -= 14
-
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, f"{boutique.nom}")
-    y -= 14
-    if boutique.numero_tva:
-        c.drawString(60, y, f"N° TVA : {boutique.numero_tva}")
-        y -= 14
-    if boutique.adresse:
-        c.drawString(60, y, boutique.adresse)
-        y -= 14
-
-    # Dentelle (si choisie)
-    if getattr(devis, "dentelle", None):
-        c.drawString(60, y, f"Dentelle : {devis.dentelle.nom}")
-        y -= 14
-
-    y -= 10
-
-    # Tableau des lignes
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Détail de la création")
-    y -= 18
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(50, y, "Description")
-    c.drawRightString(540, y, "Qté")
-    y -= 12
-    c.line(50, y, width - 50, y)
-    y -= 14
-
-    c.setFont("Helvetica", 10)
-    for ligne in lignes:
-        desc = ligne.description or "Robe de mariée sur-mesure"
-        quantite = ligne.quantite or 1
-
-        wrapped_lines = textwrap.wrap(desc, width=95)
-
-        for i, line in enumerate(wrapped_lines):
-            if y < 80:
-                c.showPage()
-                y = height - 50
-                c.setFont("Helvetica", 10)
-
-            c.drawString(50, y, line)
-            # Qté uniquement sur la première ligne
-            if i == 0:
-                c.drawRightString(540, y, str(quantite))
-            y -= 16
-
-    y -= 10
-    c.line(50, y, width - 50, y)
-    y -= 22
-
-    # RÉCAP MONTANTS
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Récapitulatif des montants")
-    y -= 18
-
-    c.setFont("Helvetica", 10)
-
-    c.drawString(60, y, "Montant HT :")
-    c.drawRightString(540, y, f"{partenaire_ht:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "TVA (20 %) :")
-    c.drawRightString(540, y, f"{partenaire_tva:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "Montant TTC :")
-    c.drawRightString(540, y, f"{partenaire_ttc:.2f} €")
-    y -= 18
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(60, y, label_montant + " :")
-    c.drawRightString(540, y, f"{montant_a_payer:.2f} €")
-    y -= 24
-
-    # Prix client conseillé
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Prix client conseillé :")
-    y -= 18
-
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, "Montant HT conseillé au client :")
-    c.drawRightString(540, y, f"{client_ht:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "TVA (20 %) sur prix client :")
-    c.drawRightString(540, y, f"{client_tva:.2f} €")
-    y -= 14
-
-    c.drawString(60, y, "Montant TTC conseillé au client :")
-    c.drawRightString(540, y, f"{client_ttc:.2f} €")
-    y -= 22
-
-    # Mentions
-    c.setFont("Helvetica", 9)
-    c.drawString(50, y, "Devis valable 20 jours à compter de sa date d'émission.")
-    y -= 12
-    c.drawString(50, y, "Tout acompte, une fois versé, ne pourra être restitué.")
-    y -= 12
-    c.drawString(
-        50,
-        y,
-        "Conditions générales de vente : www.constancecellier.fr/cgv",
+        .first()
     )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
 
-    c.showPage()
-    c.save()
-    buffer.seek(0)
+    lignes = db.query(models.LigneDevis).filter(
+        models.LigneDevis.devis_id == devis.id
+    ).all()
 
-    filename = f"devis_{ref_devis}.pdf".replace(" ", "_")
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    mesures = db.query(models.DevisMesure).filter(
+        models.DevisMesure.devis_id == devis.id
+    ).all()
+
+    prix = compute_prix_boutique_et_client(devis)
+
+    return generate_pdf_devis_bon(
+        devis=devis,
+        boutique=boutique,
+        prix=prix,
+        lignes=lignes,
+        mesures=mesures,
+        type="bon",
     )

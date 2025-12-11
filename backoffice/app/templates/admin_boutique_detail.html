@@ -9,11 +9,9 @@
         <p class="font-semibold">{{ boutique.gerant or '-' }}</p>
         <p class="text-sm text-gray-500 mt-2">Email : {{ boutique.email }}</p>
         <p class="text-sm text-gray-500">Téléphone : {{ boutique.telephone or '-' }}</p>
-        <a
-            href="/admin/boutiques/{{ boutique.id }}/edit"
-            class="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700"
-        >
-        Modifier la boutique
+        <a href="/admin/boutiques/{{ boutique.id }}/edit"
+           class="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700">
+           Modifier la boutique
         </a>
     </div>
 
@@ -37,8 +35,8 @@
                 bg-red-100 text-red-700
             {% else %}
                 bg-gray-100 text-gray-700
-            {% endif %}
-        ">
+            {% endif %}"
+        >
             {{ boutique.statut.value }}
         </span>
 
@@ -50,7 +48,7 @@
                 <option value="SUSPENDU" {% if boutique.statut.value == 'SUSPENDU' %}selected{% endif %}>SUSPENDU</option>
             </select>
             <button type="submit"
-                    class="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700">
+                class="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700">
                 Mettre à jour
             </button>
         </form>
@@ -65,13 +63,14 @@
 
 <div class="bg-white rounded shadow p-4">
     <h2 class="text-xl font-semibold mb-4">Devis</h2>
-    <table class="min-w-full bg-white">
+    <table class="min-w-full bg-white text-sm">
         <thead>
         <tr>
             <th class="px-4 py-2 text-left">Référence</th>
             <th class="px-4 py-2 text-left">Date</th>
             <th class="px-4 py-2 text-left">Statut</th>
             <th class="px-4 py-2 text-left">Montant</th>
+            <th class="px-4 py-2 text-left">Lien PDF</th>
         </tr>
         </thead>
         <tbody>
@@ -81,6 +80,13 @@
                 <td class="px-4 py-2">{{ d.date_creation.strftime('%Y-%m-%d') if d.date_creation else '' }}</td>
                 <td class="px-4 py-2">{{ d.statut.value }}</td>
                 <td class="px-4 py-2">{{ '%.2f'|format(d.prix_total) }} €</td>
+                <td class="px-4 py-2">
+                    <a href="/api/boutique/devis/{{ d.id }}/pdf"
+                       class="text-xs text-blue-600 underline"
+                       target="_blank">
+                        PDF devis
+                    </a>
+                </td>
             </tr>
         {% endfor %}
         </tbody>
@@ -109,84 +115,50 @@
             {% set bc = d.bon_commande %}
             <tr class="border-t align-top">
                 <td class="px-4 py-2">{{ boutique.nom }}-#{{ d.numero_boutique }}</td>
-                <td class="px-4 py-2">
-                    {{ bc.date_creation.strftime('%Y-%m-%d') if bc.date_creation else '' }}
-                </td>
-                <td class="px-4 py-2">
-                    {{ '%.2f'|format(bc.montant_boutique_ttc) }} €
-                </td>
+                <td class="px-4 py-2">{{ bc.date_creation.strftime('%Y-%m-%d') if bc.date_creation else '' }}</td>
+                <td class="px-4 py-2">{{ '%.2f'|format(bc.montant_boutique_ttc) }} €</td>
                 <td class="px-4 py-2">
                     {% set s = bc.statut.value %}
                     {% if s == "EN_ATTENTE_VALIDATION" %}
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-800">
-                            En attente de validation
-                        </span>
+                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-800">En attente de validation</span>
                     {% elif s == "A_MODIFIER" %}
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
-                            À modifier (boutique)
-                        </span>
+                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">À modifier (boutique)</span>
                     {% elif s == "VALIDE" %}
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">
-                            Validé
-                        </span>
+                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">Validé</span>
                     {% elif s == "REFUSE" %}
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-rose-100 text-rose-700">
-                            Refusé
-                        </span>
-                    {% else %}
-                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
-                            {{ s }}
-                        </span>
+                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-rose-100 text-rose-700">Refusé</span>
                     {% endif %}
                 </td>
                 <td class="px-4 py-2">
                     <div class="text-xs text-gray-600 mb-2">
                         {{ bc.commentaire_admin or "-" }}
                     </div>
-                    <form
-                        method="post"
-                        action="/admin/bons-commandes/{{ bc.id }}/statut"
-                        class="space-y-1"
-                    >
-                        <select
-                            name="statut"
-                            class="border rounded px-2 py-1 text-xs w-full"
-                        >
-                            <option value="EN_ATTENTE_VALIDATION" {% if s == "EN_ATTENTE_VALIDATION" %}selected{% endif %}>
-                                En attente de validation
-                            </option>
-                            <option value="A_MODIFIER" {% if s == "A_MODIFIER" %}selected{% endif %}>
-                                À modifier (boutique)
-                            </option>
-                            <option value="VALIDE" {% if s == "VALIDE" %}selected{% endif %}>
-                                Validé
-                            </option>
-                            <option value="REFUSE" {% if s == "REFUSE" %}selected{% endif %}>
-                                Refusé
-                            </option>
+
+                    <form method="post" action="/admin/bons-commande/{{ bc.id }}/update" class="space-y-1">
+                        <select name="statut" class="border rounded px-2 py-1 text-xs w-full">
+                            <option value="EN_ATTENTE_VALIDATION" {% if s == "EN_ATTENTE_VALIDATION" %}selected{% endif %}>En attente de validation</option>
+                            <option value="A_MODIFIER" {% if s == "A_MODIFIER" %}selected{% endif %}>À modifier (boutique)</option>
+                            <option value="VALIDE" {% if s == "VALIDE" %}selected{% endif %}>Validé</option>
+                            <option value="REFUSE" {% if s == "REFUSE" %}selected{% endif %}>Refusé</option>
                         </select>
 
                         <textarea
                             name="commentaire_admin"
                             rows="2"
                             class="border rounded w-full text-xs px-2 py-1"
-                            placeholder="Commentaire pour la boutique (obligatoire si À modifier / Refusé)"
                         >{{ bc.commentaire_admin or "" }}</textarea>
 
-                        <button
-                            type="submit"
-                            class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
+                        <button type="submit"
+                            class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
                             Mettre à jour
                         </button>
                     </form>
                 </td>
+
                 <td class="px-4 py-2">
-                    <a
-                        href="/api/boutique/devis/{{ d.id }}/bon-commande.pdf"
-                        class="text-xs text-blue-600 underline"
-                        target="_blank"
-                    >
+                    <a href="/api/boutique/bons-commande/{{ d.id }}/pdf"
+                       class="text-xs text-blue-600 underline"
+                       target="_blank">
                         PDF bon de commande
                     </a>
                 </td>

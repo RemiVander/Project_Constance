@@ -31,7 +31,7 @@ export default function BonCommandeConfirmationPage() {
     );
   }
 
-  const bonCommandeUrl = `${API_BASE_URL}/api/boutique/devis/${id}/bon-commande.pdf`;
+  const bonCommandeUrl = `${API_BASE_URL}/api/boutique/bons-commande/${id}/pdf`;
   const devisUrl = `${API_BASE_URL}/api/boutique/devis/${id}/pdf`;
 
   return (

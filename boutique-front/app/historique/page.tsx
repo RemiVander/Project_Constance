@@ -10,9 +10,9 @@ interface Devis {
   numero_boutique: number;
   statut: string;
   date_creation?: string | null;
-  prix_total: number;     
-  prix_boutique: number;           
-  prix_client_conseille_ttc: number; 
+  prix_total: number;
+  prix_boutique: number;
+  prix_client_conseille_ttc: number;
 }
 
 export default function HistoriqueDevisPage() {
@@ -31,9 +31,7 @@ export default function HistoriqueDevisPage() {
           router.push("/login");
           return;
         }
-        setError(
-          err?.message || "Erreur lors du chargement de l'historique"
-        );
+        setError(err?.message || "Erreur lors du chargement de l'historique");
       } finally {
         setLoading(false);
       }
@@ -89,9 +87,7 @@ export default function HistoriqueDevisPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="bg-white rounded shadow p-6 max-w-md w-full text-center">
-          <h1 className="text-xl font-semibold mb-2">
-            Erreur de chargement
-          </h1>
+          <h1 className="text-xl font-semibold mb-2">Erreur de chargement</h1>
           <p className="text-sm text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => router.push("/dashboard")}
@@ -114,17 +110,15 @@ export default function HistoriqueDevisPage() {
           ]}
         />
 
-        <h1 className="text-2xl font-bold mb-4">
-          Mon historique de devis
-        </h1>
+        <h1 className="text-2xl font-bold mb-4">Mon historique de devis</h1>
         <p className="text-sm text-gray-600 mb-6">
-          Retrouvez l'ensemble de vos devis, avec leur statut, les montants
+          Retrouvez l&apos;ensemble de vos devis, avec leur statut, les montants
           interne et client, et un lien pour télécharger le PDF.
         </p>
 
         {devis.length === 0 ? (
           <p className="text-sm text-gray-500">
-            Vous n'avez pas encore de devis.
+            Vous n&apos;avez pas encore de devis.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -142,6 +136,8 @@ export default function HistoriqueDevisPage() {
               <tbody>
                 {devis.map((d) => {
                   const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/pdf`;
+                  const isEnCours = d.statut === "EN_COURS";
+
                   return (
                     <tr key={d.id} className="border-b">
                       <td className="py-2 pr-4 font-semibold">
@@ -170,6 +166,16 @@ export default function HistoriqueDevisPage() {
                         >
                           PDF devis
                         </a>
+
+                        {isEnCours && (
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/devis/${d.id}/edit`)}
+                            className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-800 hover:bg-gray-50"
+                          >
+                            Modifier
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

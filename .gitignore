@@ -12,6 +12,7 @@ venv/
 # SCRIPTS LOCAUX (non versionnés)
 # =========================
 scripts/
+.github/
 
 # =========================
 # FICHIERS PYTHON TEMPORAIRES
