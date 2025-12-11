@@ -43,20 +43,36 @@ export default function BonsCommandePage() {
   const formatDate = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleDateString("fr-FR") : "-";
 
-  const statutBadge = (statut: string) => {
-    const base =
-      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ";
+  const statutLabel = (statut: string) => {
     switch (statut) {
       case "EN_ATTENTE_VALIDATION":
-        return base + "bg-amber-100 text-amber-800";
+        return "En attente de validation";
+      case "VALIDE":
+        return "Validé";
+      case "A_MODIFIER":
+        return "À modifier";
+      case "REFUSE":
+        return "Refusé";
+      default:
+        return statut;
+    }
+  };
+
+  const statutBadge = (statut: string) => {
+    const base =
+      "inline-flex items-center justify-center rounded-full px-3 py-0.5 text-xs font-semibold ";
+
+    switch (statut) {
+      case "EN_ATTENTE_VALIDATION":
+        return base + "bg-sky-100 text-sky-800";
       case "VALIDE":
         return base + "bg-emerald-100 text-emerald-800";
       case "A_MODIFIER":
-        return base + "bg-rose-100 text-rose-700";
+        return base + "bg-amber-100 text-amber-800";
       case "REFUSE":
-        return base + "bg-gray-200 text-gray-700";
+        return base + "bg-rose-100 text-rose-700";
       default:
-        return base + "bg-slate-100 text-slate-700";
+        return base + "bg-gray-100 text-gray-700";
     }
   };
 
@@ -92,16 +108,14 @@ export default function BonsCommandePage() {
   return (
     <div className="min-h-screen bg-slate-100 py-10">
       <div className="max-w-5xl mx-auto bg-white rounded shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xs text-gray-500">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="underline hover:text-gray-700"
-            >
-              Tableau de bord
-            </button>{" "}
-            / <span className="font-semibold">Mes bons de commande</span>
-          </div>
+        <div className="text-xs text-gray-500 mb-4">
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="underline hover:text-gray-700"
+          >
+            Tableau de bord
+          </button>{" "}
+          / <span className="font-semibold">Mes bons de commande</span>
         </div>
 
         <h1 className="text-2xl font-bold mb-2">Mes bons de commande</h1>
@@ -122,13 +136,13 @@ export default function BonsCommandePage() {
                   <th className="py-2 pr-4">Date</th>
                   <th className="py-2 pr-4">Montant HT</th>
                   <th className="py-2 pr-4">Montant TTC</th>
-                  <th className="py-2 pr-4">Statut</th>
+                  <th className="py-2 pr-4 text-center">Statut</th>
                   <th className="py-2 pr-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {bons.map((b) => {
-                  const pdfUrl = `${API_BASE_URL}/api/boutique/devis/${b.devis_id}/bon-commande.pdf`;
+                  const pdfUrl = `${API_BASE_URL}/api/boutique/bons-commande/${b.devis_id}/pdf`;
 
                   const montantAPayer = b.has_tva
                     ? b.montant_boutique_ht
@@ -137,7 +151,7 @@ export default function BonsCommandePage() {
                   const isAModifier = b.statut === "A_MODIFIER";
 
                   return (
-                    <tr key={b.id} className="border-b">
+                    <tr key={b.id} className="border-b align-top">
                       <td className="py-2 pr-4 font-semibold">
                         #{b.numero_devis}
                       </td>
@@ -150,22 +164,25 @@ export default function BonsCommandePage() {
                       <td className="py-2 pr-4">
                         {b.montant_boutique_ttc.toFixed(2)} €
                       </td>
-                      <td className="py-2 pr-4">
+
+                      <td className="py-2 pr-4 text-center">
                         <span className={statutBadge(b.statut)}>
-                          {b.statut}
+                          {statutLabel(b.statut)}
                         </span>
+
                         {b.commentaire_admin && (
-                          <div className="mt-1 text-xs text-rose-700">
+                          <div className="mt-1 text-xs text-rose-700 bg-rose-50 px-2 py-1 rounded">
                             Commentaire atelier : {b.commentaire_admin}
                           </div>
                         )}
                       </td>
-                      <td className="py-2 pr-4 space-y-1">
+
+                      <td className="py-2 pr-4 space-y-2">
                         <a
                           href={pdfUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex text-xs px-3 py-1 rounded bg-gray-900 text-white"
+                          className="inline-flex text-xs px-3 py-1 rounded-full bg-gray-900 text-white hover:bg-black"
                         >
                           PDF bon de commande
                         </a>
@@ -175,14 +192,15 @@ export default function BonsCommandePage() {
                             onClick={() =>
                               router.push(`/devis/${b.devis_id}/corriger`)
                             }
-                            className="block w-full text-xs px-3 py-1 rounded border border-amber-500 text-amber-700 hover:bg-amber-50"
+                            className="block w-full text-xs px-3 py-1 rounded-full border border-amber-500 text-amber-700 hover:bg-amber-50"
                           >
                             Corriger le bon
                           </button>
                         )}
 
                         <div className="text-[11px] text-gray-500">
-                          Montant à payer : {montantAPayer.toFixed(2)} €
+                          Montant à payer :{" "}
+                          {montantAPayer.toFixed(2).replace(".", ",")} €
                           {b.has_tva ? " (HT)" : " (TTC)"}
                         </div>
                       </td>
