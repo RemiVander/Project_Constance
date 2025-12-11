@@ -38,6 +38,36 @@ def generate_pdf_devis_bon(
     width, height = A4
     y = height - 50
 
+    # ===== helper pour gérer proprement la fin de page =====
+    def safe_draw(
+        text: str,
+        x: float,
+        y_pos: float,
+        *,
+        font_name: str = "Helvetica",
+        font_size: int = 10,
+        line_height: float = 14,
+        right: bool = False,
+    ) -> float:
+        nonlocal c, width, height
+        if y_pos < 60:
+            c.showPage()
+            y_pos = height - 60
+        c.setFont(font_name, font_size)
+        if right:
+            c.drawRightString(x, y_pos, text)
+        else:
+            c.drawString(x, y_pos, text)
+        return y_pos - line_height
+
+    def safe_line(y_pos: float) -> float:
+        nonlocal c, width, height
+        if y_pos < 60:
+            c.showPage()
+            y_pos = height - 60
+        c.line(50, y_pos, width - 50, y_pos)
+        return y_pos - 2
+
     # LOGO
     logo_path = os.path.join("app", "static", "logo_bande.png")
     if os.path.exists(logo_path):
@@ -53,93 +83,76 @@ def generate_pdf_devis_bon(
         y = height - 150
 
     # ENTÊTE
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "SARL Cellier Constance")
-    y -= 14
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, "Siren : 992 306 373")
-    y -= 14
-    c.drawString(50, y, "3, rue Maryse Bastié – 59840 Pérenchies")
-    y -= 24
+    y = safe_draw("SARL Cellier Constance", 50, y, font_name="Helvetica-Bold", font_size=11)
+    y = safe_draw("Siren : 992 306 373", 50, y)
+    y = safe_draw("3, rue Maryse Bastié – 59840 Pérenchies", 50, y)
+    y -= 10
 
     # TITRE
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(
-        50,
-        y,
-        "Devis création robe de mariée" if type == "devis" else "Bon de commande",
-    )
-    y -= 26
+    titre = "Devis création robe de mariée" if type == "devis" else "Bon de commande"
+    y = safe_draw(titre, 50, y, font_name="Helvetica-Bold", font_size=16, line_height=26)
 
-    # Référence
+    # Référence & date
     ref = f"{boutique.nom}-{devis.numero_boutique}"
     if devis.date_creation:
-        c.setFont("Helvetica", 10)
-        c.drawString(50, y, f"Date : {devis.date_creation.strftime('%d/%m/%Y')}")
-        y -= 14
-
-    c.drawString(50, y, f"Référence : {ref}")
-    y -= 24
+        y = safe_draw(
+            f"Date : {devis.date_creation.strftime('%d/%m/%Y')}",
+            50,
+            y,
+        )
+    y = safe_draw(f"Référence : {ref}", 50, y)
+    y -= 10
 
     # Boutique
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Boutique partenaire :")
-    y -= 14
-
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, boutique.nom)
-    y -= 14
+    y = safe_draw("Boutique partenaire :", 50, y, font_name="Helvetica-Bold", font_size=11)
+    y = safe_draw(boutique.nom, 60, y)
 
     if boutique.numero_tva:
-        c.drawString(60, y, f"N° TVA : {boutique.numero_tva}")
-        y -= 14
+        y = safe_draw(f"N° TVA : {boutique.numero_tva}", 60, y)
 
     if boutique.adresse:
-        c.drawString(60, y, boutique.adresse)
-        y -= 14
-
+        y = safe_draw(boutique.adresse, 60, y)
 
     # ======================
     # TABLEAU DES LIGNES
     # ======================
     y -= 16
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Détail de la création")
-    y -= 18
+    y = safe_draw("Détail de la création", 50, y, font_name="Helvetica-Bold", font_size=11, line_height=18)
 
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(50, y, "Description")
-    c.drawRightString(540, y, "Qté")
+    y = safe_draw("Description", 50, y, font_name="Helvetica-Bold", font_size=10, line_height=12)
+    y = safe_draw("Qté", 540, y, font_name="Helvetica-Bold", font_size=10, line_height=12, right=True)
+    y = safe_line(y)
     y -= 12
-    c.line(50, y, width - 50, y)
-    y -= 14
 
-    c.setFont("Helvetica", 10)
-    for ligne in lignes:
+    if not lignes:
+        # fallback si pas de lignes : au moins une ligne générique
         desc = "Robe de mariée demi-mesure"
-        quantite = ligne.quantite or 1
-
-        for i, line in enumerate(textwrap.wrap(desc, width=95)):
-            if y < 80:
-                c.showPage()
-                c.setFont("Helvetica", 10)
-                y = height - 50
-
-            c.drawString(50, y, line)
-            if i == 0:
-                c.drawRightString(540, y, str(quantite))
-            y -= 16
+        y = safe_draw(desc, 50, y)
+        y = safe_draw("1", 540, y, right=True)
+    else:
+        for ligne in lignes:
+            desc = "Robe de mariée demi-mesure"
+            quantite = ligne.quantite or 1
+            wrapped = textwrap.wrap(desc, width=95)
+            for i, line in enumerate(wrapped):
+                y = safe_draw(line, 50, y)
+                if i == 0:
+                    y = safe_draw(str(quantite), 540, y + 14, right=True) 
+  
 
     # ======================
     # DESCRIPTION DÉTAILLÉE
-    # (juste après le tableau)
     # ======================
     y -= 16
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Description de la création")
-    y -= 18
+    y = safe_draw(
+        "Description de la création",
+        50,
+        y,
+        font_name="Helvetica-Bold",
+        font_size=11,
+        line_height=18,
+    )
 
-    c.setFont("Helvetica", 10)
     description = (
         devis.lignes[0].description
         if getattr(devis, "lignes", None)
@@ -147,60 +160,57 @@ def generate_pdf_devis_bon(
     ) or "Robe de mariée sur-mesure"
 
     for line in textwrap.wrap(description, width=95):
-        if y < 80:
-            c.showPage()
-            c.setFont("Helvetica", 10)
-            y = height - 50
-        c.drawString(60, y, line)
-        y -= 14
+        y = safe_draw(line, 60, y)
 
     # Commentaire boutique (bon uniquement)
     if type == "bon" and getattr(devis, "commentaire_boutique", None):
         y -= 10
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(50, y, "Commentaire de la boutique")
-        y -= 18
-
-        c.setFont("Helvetica", 10)
+        y = safe_draw(
+            "Commentaire de la boutique",
+            50,
+            y,
+            font_name="Helvetica-Bold",
+            font_size=11,
+            line_height=18,
+        )
         for line in textwrap.wrap(devis.commentaire_boutique.replace("\n", " "), 100):
-            if y < 80:
-                c.showPage()
-                c.setFont("Helvetica", 10)
-                y = height - 50
-            c.drawString(60, y, line)
-            y -= 14
+            y = safe_draw(line, 60, y)
 
     # Mesures (bon uniquement)
     if type == "bon" and mesures:
         y -= 10
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(50, y, "Mesures fournies")
-        y -= 18
+        y = safe_draw(
+            "Mesures fournies",
+            50,
+            y,
+            font_name="Helvetica-Bold",
+            font_size=11,
+            line_height=18,
+        )
 
-        c.setFont("Helvetica", 10)
         for m in mesures:
-            if y < 80:
-                c.showPage()
-                c.setFont("Helvetica", 10)
-                y = height - 50
             label = (
                 m.type.label
                 if getattr(m, "type", None)
                 else f"Mesure {m.mesure_type_id}"
             )
-            c.drawString(60, y, f"{label} : {m.valeur}")
-            y -= 14
+            y = safe_draw(f"{label} : {m.valeur}", 60, y)
 
     # ======================
     # MONTANTS
     # ======================
     y -= 10
-    c.line(50, y, width - 50, y)
-    y -= 24
+    y = safe_line(y)
+    y -= 10
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, y, "Récapitulatif des montants")
-    y -= 18
+    y = safe_draw(
+        "Récapitulatif des montants",
+        50,
+        y,
+        font_name="Helvetica-Bold",
+        font_size=11,
+        line_height=18,
+    )
 
     p_ht, p_tva, p_ttc = (
         prix["partenaire_ht"],
@@ -209,33 +219,45 @@ def generate_pdf_devis_bon(
     )
     c_ht, c_tva, c_ttc = prix["client_ht"], prix["client_tva"], prix["client_ttc"]
 
-    c.setFont("Helvetica", 10)
-    c.drawString(60, y, "Montant HT :")
-    c.drawRightString(540, y, f"{p_ht:.2f} €")
-    y -= 14
+    y = safe_draw("Montant HT :", 60, y)
+    y = safe_draw(f"{p_ht:.2f} €", 540, y + 14, right=True)
 
-    c.drawString(60, y, "TVA (20 %) :")
-    c.drawRightString(540, y, f"{p_tva:.2f} €")
-    y -= 14
+    y = safe_draw("TVA (20 %) :", 60, y)
+    y = safe_draw(f"{p_tva:.2f} €", 540, y + 14, right=True)
 
-    c.drawString(60, y, "Montant TTC :")
-    c.drawRightString(540, y, f"{p_ttc:.2f} €")
-    y -= 20
+    y = safe_draw("Montant TTC :", 60, y)
+    y = safe_draw(f"{p_ttc:.2f} €", 540, y + 14, right=True)
 
-    # Mention finale
-    c.setFont("Helvetica", 9)
+    # ======================
+    # MENTIONS FINALES
+    # ======================
+    y -= 10
     if type == "devis":
-        c.drawString(
-            50, y, "Devis valable 20 jours à compter de sa date d'émission."
+        y = safe_draw(
+            "Devis valable 20 jours à compter de sa date d'émission.",
+            50,
+            y,
+            font_name="Helvetica",
+            font_size=9,
+            line_height=12,
         )
     else:
-        c.drawString(
-            50, y, "Bon de commande basé sur le devis précédemment validé."
+        y = safe_draw(
+            "Bon de commande basé sur le devis précédemment validé.",
+            50,
+            y,
+            font_name="Helvetica",
+            font_size=9,
+            line_height=12,
         )
-    y -= 12
 
-    c.drawString(
-        50, y, "Conditions générales de vente : www.constancecellier.fr/cgv"
+    y = safe_draw(
+        "Conditions générales de vente : www.constancecellier.fr/cgv",
+        50,
+        y,
+        font_name="Helvetica",
+        font_size=9,
+        line_height=12,
     )
 
     # Finalisation
