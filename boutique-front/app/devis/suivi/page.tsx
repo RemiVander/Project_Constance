@@ -153,9 +153,7 @@ export default function SuiviDevisPage() {
           <span className="text-gray-600">Filtrer par statut :</span>
           <select
             value={filtreStatut}
-            onChange={(e) =>
-              setFiltreStatut(e.target.value as any)
-            }
+            onChange={(e) => setFiltreStatut(e.target.value as any)}
             className="border rounded px-2 py-1 text-sm"
           >
             <option value="EN_COURS">En cours</option>
@@ -166,9 +164,7 @@ export default function SuiviDevisPage() {
         </div>
 
         {devisFiltres.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Aucun devis pour ce filtre.
-          </p>
+          <p className="text-sm text-gray-500">Aucun devis pour ce filtre.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -230,6 +226,16 @@ export default function SuiviDevisPage() {
 
                         {isEnCours && (
                           <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(`/devis/${d.id}/edit`)
+                              }
+                              className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              Modifier
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleValider(d.id)}

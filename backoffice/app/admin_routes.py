@@ -108,19 +108,20 @@ def api_ca_par_boutique(
 # ========= Boutiques =========
 
 @router.get("/admin/boutiques")
-def boutiques_list(
+def admin_boutiques(
     request: Request,
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
     boutiques = db.query(models.Boutique).order_by(models.Boutique.nom).all()
     return templates.TemplateResponse(
-        "admin_boutiques.html",
+        "admin_boutiques_list.html",
         {
             "request": request,
             "admin": admin,
             "boutiques": boutiques,
             "page": "boutiques",
+            "sous_page": "boutiques",
         },
     )
 
@@ -219,6 +220,11 @@ def boutique_detail(
         .all()
     )
 
+    total_ca = sum(d.prix_total for d in devis)
+    nb_devis = len(devis)
+    nb_acceptes = len([d for d in devis if d.statut == models.StatutDevis.ACCEPTE])
+    taux_acceptation = (nb_acceptes / nb_devis * 100) if nb_devis else 0
+
     return templates.TemplateResponse(
         "admin_boutique_detail.html",
         {
@@ -226,9 +232,14 @@ def boutique_detail(
             "admin": admin,
             "boutique": boutique,
             "devis": devis,
+            "total_ca": total_ca,
+            "nb_devis": nb_devis,
+            "nb_acceptes": nb_acceptes,
+            "taux_acceptation": taux_acceptation,
             "page": "boutiques",
         },
     )
+
 
 
 @router.post("/admin/boutiques/{boutique_id}/edit")
@@ -786,3 +797,36 @@ def delete_accessoire(
         db.delete(a)
         db.commit()
     return RedirectResponse(url="/admin/produits/accessoires", status_code=302)
+
+
+@router.post("/admin/bons-commande/{bon_id}/update")
+def admin_update_bon_commande(
+    bon_id: int,
+    request: Request,
+    statut: str = Form(...),
+    commentaire_admin: str = Form(""),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    bon = db.query(models.BonCommande).get(bon_id)
+    if not bon:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    # Mise à jour du statut
+    try:
+        if hasattr(models, "StatutBonCommande"):
+            bon.statut = models.StatutBonCommande(statut)
+        else:
+            bon.statut = statut
+    except Exception:
+        pass
+
+    # Mise à jour du commentaire admin
+    bon.commentaire_admin = commentaire_admin.strip() or None
+
+    db.commit()
+
+    return RedirectResponse(
+        url=f"/admin/boutiques/{bon.devis.boutique_id}",
+        status_code=302,
+    )
