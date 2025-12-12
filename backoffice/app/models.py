@@ -59,9 +59,14 @@ class Boutique(Base):
     gerant = Column(String, nullable=True)
     telephone = Column(String, nullable=True)
     adresse = Column(Text, nullable=True)
+    numero_tva=Column(String, nullable=True)
+
 
     mot_de_passe_hash = Column(String, nullable=True)
     doit_changer_mdp = Column(Boolean, default=True, nullable=False)
+    password_reset_token = Column(String, nullable=True)
+    password_reset_expires = Column(DateTime, nullable=True)
+
 
     statut = Column(SAEnum(BoutiqueStatut), default=BoutiqueStatut.ACTIF, nullable=False)
     numero_tva = Column(String, nullable=True)

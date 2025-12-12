@@ -1,27 +1,29 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from typing import List, Optional, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Cookie, Response
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Header, Cookie, Response, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+import secrets
+
 from .pdf_utils import generate_pdf_devis_bon
-
-
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from io import BytesIO
-import textwrap
+from .utils.mailer import (
+    send_admin_bc_notification,
+    send_password_reset_email,
+    send_boutique_password_email
+)
 
 from .database import SessionLocal
 from . import models
-from .auth import verify_password, get_password_hash
+from .auth import get_current_admin, verify_password, get_password_hash
 
 
 router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
+FRONT_BASE_URL = os.getenv("FRONT_BASE_URL", "http://localhost:3000")
 
 # IMPORTANT : à modifier dans la vraie vie
 SECRET_KEY = "CHANGE_ME_SECRET_KEY"
@@ -91,11 +93,10 @@ class BoutiquePublic(BaseModel):
     adresse: Optional[str] = None
     code_postal: Optional[str] = None
     ville: Optional[str] = None
-    numero_tva: Optional[str] = None 
+    numero_tva: Optional[str] = None
 
     class Config:
         orm_mode = True
-
 
 
 class LoginRequest(BaseModel):
@@ -132,6 +133,13 @@ class LigneDevisPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MesureValeurPublic(BaseModel):
+    mesure_type_id: int
+    valeur: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class DevisPublic(BaseModel):
     id: int
     numero_boutique: int
@@ -143,7 +151,6 @@ class DevisPublic(BaseModel):
     configuration: dict | None = None
     dentelle_id: int | None = None
     lignes: Optional[List["LigneDevisPublic"]] = None
-    # NEW : mesures pour pré-remplir la page de correction
     mesures: Optional[List["MesureValeurPublic"]] = None
 
     model_config = {"from_attributes": True}
@@ -159,13 +166,6 @@ class MesureTypePublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class MesureValeurPublic(BaseModel):
-    mesure_type_id: int
-    valeur: float | None = None
-
-    model_config = {"from_attributes": True}
-
-
 class MesureValeurPayload(BaseModel):
     mesure_type_id: int
     valeur: float
@@ -176,10 +176,10 @@ class UpdateDevisStatutPayload(BaseModel):
     mesures: Optional[List[MesureValeurPayload]] = None
 
 
-
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
 
 class BoutiqueProfileUpdate(BaseModel):
     nom: Optional[str] = None
@@ -320,7 +320,6 @@ def build_devis_public(
     )
 
 
-
 # =========================
 # Endpoints auth & profil
 # =========================
@@ -377,6 +376,7 @@ def get_me(
 ):
     return boutique
 
+
 @router.put("/me", response_model=BoutiquePublic)
 def update_me(
     payload: BoutiqueProfileUpdate,
@@ -402,7 +402,6 @@ def update_me(
     if payload.email is not None:
         boutique.email = payload.email
 
-
     db.commit()
     db.refresh(boutique)
     return boutique
@@ -425,10 +424,7 @@ def change_password(
 
 @router.post("/logout")
 def logout_boutique(response: Response):
-    response.delete_cookie(
-        key="b2b_token",
-        path="/",
-    )
+    response.delete_cookie(key="b2b_token", path="/")
     return {"ok": True}
 
 
@@ -449,10 +445,7 @@ def get_options(
     dentelles = db.query(models.Dentelle).filter_by(actif=True).all()
 
     return {
-        "robe_modeles": [
-            {"id": m.id, "nom": m.nom, "description": m.description}
-            for m in modeles
-        ],
+        "robe_modeles": [{"id": m.id, "nom": m.nom, "description": m.description} for m in modeles],
         "tarifs_transformations": [
             {
                 "id": t.id,
@@ -485,14 +478,8 @@ def get_options(
             {"id": f.id, "nom": f.nom, "prix": f.prix, "est_fente": f.est_fente}
             for f in finitions
         ],
-        "accessoires": [
-            {"id": a.id, "nom": a.nom, "description": a.description, "prix": a.prix}
-            for a in accessoires
-        ],
-        "dentelles": [
-            {"id": d.id, "nom": d.nom}
-            for d in dentelles
-        ],
+        "accessoires": [{"id": a.id, "nom": a.nom, "description": a.description, "prix": a.prix} for a in accessoires],
+        "dentelles": [{"id": d.id, "nom": d.nom} for d in dentelles],
     }
 
 
@@ -544,10 +531,7 @@ def create_devis(
         )
 
     if not payload.lignes:
-        raise HTTPException(
-            status_code=400,
-            detail="Le devis doit contenir au moins une ligne",
-        )
+        raise HTTPException(status_code=400, detail="Le devis doit contenir au moins une ligne")
 
     max_num = (
         db.query(models.Devis.numero_boutique)
@@ -562,9 +546,7 @@ def create_devis(
         numero_boutique=next_num,
         statut=models.StatutDevis.EN_COURS,
         prix_total=0.0,
-        configuration_json=json.dumps(payload.configuration)
-        if payload.configuration is not None
-        else None,
+        configuration_json=json.dumps(payload.configuration) if payload.configuration is not None else None,
         dentelle_id=payload.dentelle_id,
     )
 
@@ -599,7 +581,6 @@ def update_devis(
 ):
     """
     Edition d'un devis existant (lignes + configuration + dentelle).
-
     On n'autorise l'édition que si le devis appartient à la boutique
     et qu'il n'est pas REFUSE ou ACCEPTE.
     """
@@ -612,28 +593,15 @@ def update_devis(
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
     if d.statut in (models.StatutDevis.ACCEPTE, models.StatutDevis.REFUSE):
-        raise HTTPException(
-            status_code=400,
-            detail="Impossible de modifier un devis déjà accepté ou refusé.",
-        )
+        raise HTTPException(status_code=400, detail="Impossible de modifier un devis déjà accepté ou refusé.")
 
     if not payload.lignes:
-        raise HTTPException(
-            status_code=400,
-            detail="Le devis doit contenir au moins une ligne",
-        )
+        raise HTTPException(status_code=400, detail="Le devis doit contenir au moins une ligne")
 
-    # Mise à jour configuration + dentelle
-    d.configuration_json = (
-        json.dumps(payload.configuration)
-        if payload.configuration is not None
-        else None
-    )
+    d.configuration_json = json.dumps(payload.configuration) if payload.configuration is not None else None
     d.dentelle_id = payload.dentelle_id
 
-    db.query(models.LigneDevis).filter(
-        models.LigneDevis.devis_id == d.id
-    ).delete()
+    db.query(models.LigneDevis).filter(models.LigneDevis.devis_id == d.id).delete()
 
     total = 0.0
     for ligne in payload.lignes:
@@ -648,11 +616,12 @@ def update_devis(
         total += ligne.quantite * ligne.prix_unitaire
 
     d.prix_total = total
-    d.statut = models.StatutDevis.EN_COURS 
+    d.statut = models.StatutDevis.EN_COURS
     db.commit()
     db.refresh(d)
 
     return build_devis_public(d, boutique, include_lignes=True)
+
 
 # =========================
 # Types de mesures
@@ -663,12 +632,9 @@ def list_mesure_types(
     db: Session = Depends(get_db),
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
-    types = (
-        db.query(models.MesureType)
-        .order_by(models.MesureType.ordre, models.MesureType.id)
-        .all()
-    )
+    types = db.query(models.MesureType).order_by(models.MesureType.ordre, models.MesureType.id).all()
     return types
+
 
 # =========================
 # Mesures d'un devis (correction bon de commande)
@@ -676,12 +642,14 @@ def list_mesure_types(
 
 class UpdateDevisMesuresPayload(BaseModel):
     mesures: List[MesureValeurPayload]
+    commentaire_boutique: Optional[str] = None  # optionnel : si ton front envoie un commentaire
 
 
 @router.put("/devis/{devis_id}/mesures", response_model=DevisPublic)
 def update_devis_mesures(
     devis_id: int,
     payload: UpdateDevisMesuresPayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
@@ -690,14 +658,11 @@ def update_devis_mesures(
     - met à jour les mesures du devis
     - recalcule le montant du bon de commande
     - remet le bon en EN_ATTENTE_VALIDATION
+    - NOTIFIE L'ADMIN (revalidation)
     """
-
     devis = (
         db.query(models.Devis)
-        .filter(
-            models.Devis.id == devis_id,
-            models.Devis.boutique_id == boutique.id,
-        )
+        .filter(models.Devis.id == devis_id, models.Devis.boutique_id == boutique.id)
         .first()
     )
     if not devis:
@@ -715,18 +680,13 @@ def update_devis_mesures(
         )
         db.add(dm)
 
-    # Recalcul des montants pour le bon de commande
     prix = compute_prix_boutique_et_client(devis)
     has_tva = bool(boutique.numero_tva)
 
     montant_boutique_ht = prix["partenaire_ht"]
     montant_boutique_ttc = prix["partenaire_ttc"]
 
-    bon = (
-        db.query(models.BonCommande)
-        .filter(models.BonCommande.devis_id == devis.id)
-        .first()
-    )
+    bon = db.query(models.BonCommande).filter(models.BonCommande.devis_id == devis.id).first()
 
     if not bon:
         bon = models.BonCommande(
@@ -741,12 +701,41 @@ def update_devis_mesures(
         bon.montant_boutique_ttc = montant_boutique_ttc
         bon.has_tva = has_tva
 
-    # On remet le bon en attente de validation atelier
+    # commentaire boutique optionnel
+    if hasattr(bon, "commentaire_boutique") and payload.commentaire_boutique is not None:
+        bon.commentaire_boutique = payload.commentaire_boutique
+
     if hasattr(models, "StatutBonCommande") and hasattr(bon, "statut"):
         bon.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
 
     db.commit()
     db.refresh(devis)
+
+    # ---- MAIL ADMIN : BC revalidé ----
+    try:
+        ref = f"{boutique.nom}-{devis.numero_boutique}"
+        comment = getattr(bon, "commentaire_boutique", None) or ""
+
+        subject = f"Bon de commande soumis — {ref}"
+        html = f"""
+        <p>La boutique <b>{boutique.nom}</b> a soumis / revalidé un bon de commande.</p>
+        <p><b>Référence :</b> {ref}</p>
+        <p><b>Commentaire boutique :</b></p>
+        <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
+            {comment or "—"}
+        </div>
+        """
+        text = f"BC soumis par {boutique.nom} ({ref})\nCommentaire boutique : {comment or '—'}"
+
+        background_tasks.add_task(
+            send_admin_bc_notification,
+            subject,
+            html,
+            text,
+        )
+
+    except Exception:
+        pass
 
     return build_devis_public(devis, boutique, include_lignes=True)
 
@@ -759,15 +748,13 @@ def update_devis_mesures(
 def update_devis_statut(
     devis_id: int,
     payload: UpdateDevisStatutPayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
     devis = (
         db.query(models.Devis)
-        .filter(
-            models.Devis.id == devis_id,
-            models.Devis.boutique_id == boutique.id,
-        )
+        .filter(models.Devis.id == devis_id, models.Devis.boutique_id == boutique.id)
         .first()
     )
 
@@ -776,10 +763,7 @@ def update_devis_statut(
 
     if payload.statut == "ACCEPTE":
         if not payload.mesures or len(payload.mesures) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Les mesures sont obligatoires pour valider le devis.",
-            )
+            raise HTTPException(status_code=400, detail="Les mesures sont obligatoires pour valider le devis.")
 
         devis.mesures.clear()
         db.flush()
@@ -800,11 +784,9 @@ def update_devis_statut(
         montant_boutique_ht = prix["partenaire_ht"]
         montant_boutique_ttc = prix["partenaire_ttc"]
 
-        bon = (
-            db.query(models.BonCommande)
-            .filter(models.BonCommande.devis_id == devis.id)
-            .first()
-        )
+        bon = db.query(models.BonCommande).filter(models.BonCommande.devis_id == devis.id).first()
+        created = False
+
         if not bon:
             bon = models.BonCommande(
                 devis_id=devis.id,
@@ -813,6 +795,7 @@ def update_devis_statut(
                 has_tva=has_tva,
             )
             db.add(bon)
+            created = True
         else:
             bon.montant_boutique_ht = montant_boutique_ht
             bon.montant_boutique_ttc = montant_boutique_ttc
@@ -823,8 +806,33 @@ def update_devis_statut(
 
         db.commit()
         db.refresh(devis)
-        return build_devis_public(devis, boutique, include_lignes=True)
 
+        # ---- MAIL ADMIN : BC soumis (première validation) ----
+        try:
+            ref = f"{boutique.nom}-{devis.numero_boutique}"
+            comment = getattr(bon, "commentaire_boutique", None) or ""
+
+            subject = f"Bon de commande soumis — {ref}"
+            html = f"""
+            <p>La boutique <b>{boutique.nom}</b> a soumis / revalidé un bon de commande.</p>
+            <p><b>Référence :</b> {ref}</p>
+            <p><b>Commentaire boutique :</b></p>
+            <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
+                {comment or "—"}
+            </div>
+            """
+            text = f"BC soumis par {boutique.nom} ({ref})\nCommentaire boutique : {comment or '—'}"
+
+            background_tasks.add_task(
+                send_admin_bc_notification,
+                subject,
+                html,
+                text,
+            )
+        except Exception:
+            pass
+
+        return build_devis_public(devis, boutique, include_lignes=True)
 
     if payload.statut == "REFUSE":
         devis.statut = models.StatutDevis.REFUSE
@@ -852,7 +860,6 @@ def list_bons_commande(
     )
 
     result: List[BonCommandePublic] = []
-
     for bc in bons:
         result.append(
             BonCommandePublic(
@@ -863,18 +870,125 @@ def list_bons_commande(
                 montant_boutique_ht=bc.montant_boutique_ht,
                 montant_boutique_ttc=bc.montant_boutique_ttc,
                 has_tva=bc.has_tva,
-                statut=bc.statut.value
-                if hasattr(bc.statut, "value")
-                else str(bc.statut),
+                statut=bc.statut.value if hasattr(bc.statut, "value") else str(bc.statut),
                 commentaire_admin=bc.commentaire_admin,
+                commentaire_boutique=getattr(bc, "commentaire_boutique", None),
             )
         )
-
     return result
+
 
 @router.get("/devis/{devis_id}/pdf")
 def get_devis_pdf(
     devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(models.Devis.id == devis_id, models.Devis.boutique_id == boutique.id)
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Devis introuvable")
+
+    lignes = db.query(models.LigneDevis).filter(models.LigneDevis.devis_id == devis.id).all()
+    prix = compute_prix_boutique_et_client(devis)
+
+    return generate_pdf_devis_bon(
+        devis=devis,
+        boutique=boutique,
+        prix=prix,
+        lignes=lignes,
+        type="devis",
+    )
+
+
+@router.get("/bons-commande/{devis_id}/pdf")
+def get_bon_commande_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    devis = (
+        db.query(models.Devis)
+        .filter(models.Devis.id == devis_id, models.Devis.boutique_id == boutique.id)
+        .first()
+    )
+    if not devis:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    lignes = db.query(models.LigneDevis).filter(models.LigneDevis.devis_id == devis.id).all()
+    mesures = db.query(models.DevisMesure).filter(models.DevisMesure.devis_id == devis.id).all()
+    prix = compute_prix_boutique_et_client(devis)
+
+    return generate_pdf_devis_bon(
+        devis=devis,
+        boutique=boutique,
+        prix=prix,
+        lignes=lignes,
+        mesures=mesures,
+        type="bon",
+    )
+
+
+# =========================
+# Mailers : mot de passe oublié
+# =========================
+
+class ForgotPasswordPayload(BaseModel):
+    email: str
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/password/forgot")
+def forgot_password(
+    payload: ForgotPasswordPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    # réponse toujours générique
+    b = db.query(models.Boutique).filter(models.Boutique.email == payload.email).first()
+    if not b:
+        return {"ok": True}
+
+    token = secrets.token_urlsafe(32)
+    b.password_reset_token = token
+    b.password_reset_expires = datetime.utcnow() + timedelta(hours=2)
+    db.commit()
+
+    link = f"{FRONT_BASE_URL}/login/reset?token={token}"
+    background_tasks.add_task(send_password_reset_email, b.email, link)
+    return {"ok": True}
+
+
+@router.post("/password/reset")
+def reset_password(
+    payload: ResetPasswordPayload,
+    db: Session = Depends(get_db),
+):
+    b = db.query(models.Boutique).filter(models.Boutique.password_reset_token == payload.token).first()
+    if not b or not b.password_reset_expires or b.password_reset_expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Lien invalide ou expiré")
+
+    b.mot_de_passe_hash = get_password_hash(payload.new_password)
+    b.doit_changer_mdp = False
+    b.password_reset_token = None
+    b.password_reset_expires = None
+    db.commit()
+
+    return {"ok": True}
+
+
+
+@router.post("/devis/{devis_id}/bon-commande", response_model=BonCommandePublic)
+def create_bon_commande(
+    devis_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
@@ -889,58 +1003,98 @@ def get_devis_pdf(
     if not devis:
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
-    lignes = db.query(models.LigneDevis).filter(
-        models.LigneDevis.devis_id == devis.id
-    ).all()
-
-    prix = compute_prix_boutique_et_client(devis)
-
-    return generate_pdf_devis_bon(
-        devis=devis,
-        boutique=boutique,
-        prix=prix,
-        lignes=lignes,
-        type="devis",
-    )
-
-
-# =========================
-# PDF Bon de commande
-# =========================
-
-
-@router.get("/bons-commande/{devis_id}/pdf")
-def get_bon_commande_pdf(
-    devis_id: int,
-    db: Session = Depends(get_db),
-    boutique: models.Boutique = Depends(get_current_boutique),
-):
-    devis = (
-        db.query(models.Devis)
-        .filter(
-            models.Devis.id == devis_id,
-            models.Devis.boutique_id == boutique.id,
-        )
+    # ⚠️ évite de recréer un BC s’il existe déjà
+    bon = (
+        db.query(models.BonCommande)
+        .filter(models.BonCommande.devis_id == devis.id)
         .first()
     )
-    if not devis:
-        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+    if bon:
+        raise HTTPException(status_code=400, detail="Bon de commande déjà créé")
 
-    lignes = db.query(models.LigneDevis).filter(
-        models.LigneDevis.devis_id == devis.id
-    ).all()
-
-    mesures = db.query(models.DevisMesure).filter(
-        models.DevisMesure.devis_id == devis.id
-    ).all()
-
-    prix = compute_prix_boutique_et_client(devis)
-
-    return generate_pdf_devis_bon(
-        devis=devis,
-        boutique=boutique,
-        prix=prix,
-        lignes=lignes,
-        mesures=mesures,
-        type="bon",
+    bon = models.BonCommande(
+        devis_id=devis.id,
+        statut=models.StatutBonCommande.EN_ATTENTE_VALIDATION,
     )
+    db.add(bon)
+    db.commit()
+    db.refresh(bon)
+
+    # 📧 Mail admin
+    ref = f"{boutique.nom}-{devis.numero_boutique}"
+
+    subject = f"Nouveau bon de commande à valider — {ref}"
+    html_block = f"""
+    <p>La boutique <b>{boutique.nom}</b> a soumis un bon de commande.</p>
+    <p><b>Référence :</b> {ref}</p>
+    """
+    text = f"Nouveau bon de commande soumis par {boutique.nom} ({ref})"
+
+    background_tasks.add_task(
+        send_admin_bc_notification,
+        subject,
+        html_block,
+        text,
+    )
+
+    return bon
+
+
+class ForgotPasswordPayload(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/password/forgot")
+def forgot_password(
+    payload: ForgotPasswordPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    boutique = db.query(models.Boutique).filter(models.Boutique.email == payload.email).first()
+    if not boutique:
+        return {"ok": True}
+
+    token = secrets.token_urlsafe(32)
+    boutique.password_reset_token = token
+    boutique.password_reset_expires = datetime.utcnow() + timedelta(hours=2)
+    db.commit()
+
+    link = f"{FRONT_BASE_URL}/login/reset?token={token}"
+
+    background_tasks.add_task(
+        send_password_reset_email,
+        boutique.email,
+        link,
+    )
+
+    return {"ok": True}
+
+
+@router.post("/password/reset")
+def reset_password(
+    payload: ResetPasswordPayload,
+    db: Session = Depends(get_db),
+):
+    boutique = db.query(models.Boutique).filter(
+        models.Boutique.password_reset_token == payload.token
+    ).first()
+
+    if (
+        not boutique
+        or not boutique.password_reset_expires
+        or boutique.password_reset_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="Lien invalide ou expiré")
+
+    boutique.mot_de_passe_hash = get_password_hash(payload.new_password)
+    boutique.doit_changer_mdp = False
+    boutique.password_reset_token = None
+    boutique.password_reset_expires = None
+    db.commit()
+
+    return {"ok": True}

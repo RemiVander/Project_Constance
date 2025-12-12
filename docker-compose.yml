@@ -25,3 +25,11 @@ services:
       - "3000:3000"
     depends_on:
       - api
+
+  smtp:
+    image: rnwood/smtp4dev:v3
+    container_name: constance-smtp
+    ports:
+      - "5000:80"   # UI web
+      - "2525:25"   # SMTP
+
