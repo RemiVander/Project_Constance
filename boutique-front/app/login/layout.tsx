@@ -1,12 +1,6 @@
-import "./globals.css";
-import type { Metadata } from "next";
+import "../globals.css";
 
-export const metadata: Metadata = {
-  title: "Espace partenaires",
-  description: "Portail B2B pour les boutiques partenaires",
-};
-
-export default function RootLayout({
+export default function LoginLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -15,7 +9,7 @@ export default function RootLayout({
     <html lang="fr">
       <body className="min-h-screen bg-gray-100">
         <div
-          className="min-h-screen"
+          className="min-h-screen flex items-center justify-center px-4"
           style={{
             backgroundImage: "url('/images/background.jpg')",
             backgroundSize: "cover",
@@ -24,7 +18,7 @@ export default function RootLayout({
             backgroundAttachment: "fixed",
           }}
         >
-          <div className="min-h-screen bg-white/70">
+          <div className="bg-white/70 min-h-screen w-full flex items-center justify-center">
             {children}
           </div>
         </div>

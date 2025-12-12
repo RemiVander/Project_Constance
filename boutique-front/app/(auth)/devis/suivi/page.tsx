@@ -9,9 +9,9 @@ type Devis = {
   numero_boutique: number;
   statut: string;
   date_creation?: string | null;
-  prix_total: number; // base interne HT
-  prix_boutique: number; // ce que Constance facture à la boutique (HT ou TTC selon TVA)
-  prix_client_conseille_ttc: number; // prix public conseillé TTC
+  prix_total: number;
+  prix_boutique: number;
+  prix_client_conseille_ttc: number;
 };
 
 export default function SuiviDevisPage() {
@@ -30,13 +30,17 @@ export default function SuiviDevisPage() {
         const data = await apiFetch("/api/boutique/devis");
         setDevis(data as Devis[]);
       } catch (e: any) {
+        if (e?.message?.includes("401")) {
+          router.replace("/login");
+          return;
+        }
         setErrorMsg(e.message || "Erreur lors du chargement des devis");
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, []);
+  }, [router]);
 
   function formatDate(iso?: string | null) {
     if (!iso) return "-";
@@ -102,51 +106,44 @@ export default function SuiviDevisPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="bg-white rounded shadow p-4 text-sm text-gray-600">
-          Chargement des devis...
-        </div>
+      <div className="min-h-screen bg-slate-100">
+        <main className="max-w-5xl mx-auto px-4 py-10">
+          <div className="bg-white rounded shadow p-4 text-sm text-gray-600">
+            Chargement des devis...
+          </div>
+        </main>
       </div>
     );
   }
 
   if (errorMsg) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="bg-white rounded shadow p-6 max-w-md w-full text-center">
-          <h1 className="text-xl font-semibold mb-2">
-            Impossible de charger les devis
-          </h1>
-          <p className="text-sm text-gray-600 mb-4">{errorMsg}</p>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="px-4 py-2 rounded bg-gray-900 text-white text-sm font-semibold"
-          >
-            Retour au tableau de bord
-          </button>
-        </div>
+      <div className="min-h-screen bg-slate-100">
+        <main className="max-w-5xl mx-auto px-4 py-10">
+          <div className="bg-white rounded shadow p-6 max-w-md w-full text-center mx-auto">
+            <h1 className="text-xl font-semibold mb-2">
+              Impossible de charger les devis
+            </h1>
+            <p className="text-sm text-gray-600 mb-4">{errorMsg}</p>
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="px-4 py-2 rounded bg-gray-900 text-white text-sm font-semibold"
+            >
+              Retour au tableau de bord
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 py-10">
-      <div className="max-w-5xl mx-auto bg-white rounded shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xs text-gray-500">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="underline hover:text-gray-700"
-            >
-              Tableau de bord
-            </button>{" "}
-            / <span className="font-semibold">Suivre un devis</span>
-          </div>
-        </div>
-
-        <h1 className="text-2xl font-bold mb-2">Suivre un devis</h1>
+    <div className="min-h-screen bg-slate-100">      
+      <main className="max-w-5xl mx-auto px-4 py-10">
+        <h1 className="text-2xl font-bold mb-2">Suivre mes devis</h1>
         <p className="text-sm text-gray-600 mb-4">
-          Retrouvez vos devis et choisissez de les valider ou de les refuser.
+          Retrouvez l&apos;ensemble de vos devis, leur statut, les montants
+          interne et client, et téléchargez les PDF.
         </p>
 
         <div className="flex items-center gap-3 mb-4 text-sm">
@@ -164,9 +161,11 @@ export default function SuiviDevisPage() {
         </div>
 
         {devisFiltres.length === 0 ? (
-          <p className="text-sm text-gray-500">Aucun devis pour ce filtre.</p>
+          <p className="text-sm text-gray-500">
+            Aucun devis pour ce filtre.
+          </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto bg-white rounded shadow">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
@@ -181,7 +180,6 @@ export default function SuiviDevisPage() {
               <tbody>
                 {devisFiltres.map((d) => {
                   const devisPdfUrl = `${API_BASE_URL}/api/boutique/devis/${d.id}/pdf`;
-                  // ✅ nouvelle route pour le PDF du bon de commande
                   const bonCommandeUrl = `${API_BASE_URL}/api/boutique/bons-commande/${d.id}/pdf`;
                   const isEnCours = d.statut === "EN_COURS";
 
@@ -266,7 +264,7 @@ export default function SuiviDevisPage() {
             </table>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

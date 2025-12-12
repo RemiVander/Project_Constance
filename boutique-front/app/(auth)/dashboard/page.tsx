@@ -14,7 +14,7 @@ export default function Dashboard() {
         const data = await apiFetch("/api/boutique/me");
         setMe(data);
       } catch {
-        router.push("/login");
+        router.replace("/login");
       }
     }
     load();
@@ -48,15 +48,6 @@ export default function Dashboard() {
           </p>
         </button>
 
-        <button
-          onClick={() => router.push("/historique")}
-          className="bg-white border rounded-xl p-4 shadow hover:shadow-md"
-        >
-          <h2 className="font-semibold">Mon historique</h2>
-          <p className="text-sm text-gray-500">
-            Vos devis passés et confirmés.
-          </p>
-        </button>
         <button
             onClick={() => router.push("/bons-commande")}
             className="bg-white border rounded-xl p-4 shadow hover:shadow-md"

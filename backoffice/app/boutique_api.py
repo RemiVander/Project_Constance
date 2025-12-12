@@ -86,7 +86,16 @@ class BoutiquePublic(BaseModel):
     email: EmailStr
     doit_changer_mdp: bool
 
-    model_config = {"from_attributes": True}
+    gerant: Optional[str] = None
+    telephone: Optional[str] = None
+    adresse: Optional[str] = None
+    code_postal: Optional[str] = None
+    ville: Optional[str] = None
+    numero_tva: Optional[str] = None 
+
+    class Config:
+        orm_mode = True
+
 
 
 class LoginRequest(BaseModel):
@@ -171,6 +180,15 @@ class UpdateDevisStatutPayload(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class BoutiqueProfileUpdate(BaseModel):
+    nom: Optional[str] = None
+    gerant: Optional[str] = None
+    telephone: Optional[str] = None
+    adresse: Optional[str] = None
+    code_postal: Optional[str] = None
+    ville: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class BonCommandePublic(BaseModel):
@@ -357,6 +375,36 @@ def login_boutique(
 def get_me(
     boutique: models.Boutique = Depends(get_current_boutique),
 ):
+    return boutique
+
+@router.put("/me", response_model=BoutiquePublic)
+def update_me(
+    payload: BoutiqueProfileUpdate,
+    db: Session = Depends(get_db),
+    boutique: models.Boutique = Depends(get_current_boutique),
+):
+    """
+    Mise à jour du profil boutique côté front.
+    La TVA n'est pas modifiable ici (gérée en back-office).
+    """
+    if payload.nom is not None:
+        boutique.nom = payload.nom
+    if payload.gerant is not None:
+        boutique.gerant = payload.gerant
+    if payload.telephone is not None:
+        boutique.telephone = payload.telephone
+    if payload.adresse is not None:
+        boutique.adresse = payload.adresse
+    if payload.code_postal is not None:
+        boutique.code_postal = payload.code_postal
+    if payload.ville is not None:
+        boutique.ville = payload.ville
+    if payload.email is not None:
+        boutique.email = payload.email
+
+
+    db.commit()
+    db.refresh(boutique)
     return boutique
 
 
