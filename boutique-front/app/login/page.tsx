@@ -21,8 +21,15 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      router.replace("/dashboard");
-    } catch (err: any) {
+
+      const me = await apiFetch("/api/boutique/me");
+
+      if (me?.doit_changer_mdp) {
+        router.replace("/profil");
+      } else {
+        router.replace("/dashboard");
+      }
+    } catch {
       setError("Connexion impossible. Veuillez vérifier vos identifiants.");
     } finally {
       setLoading(false);
@@ -32,7 +39,9 @@ export default function LoginPage() {
   return (
     <div className="flex flex-col md:flex-row gap-8 items-center">
       <div className="hidden md:block flex-1 text-gray-700">
-        <h1 className="text-2xl font-bold mb-3 text-center">Espace partenaires <br /> Constance Cellier</h1>
+        <h1 className="text-2xl font-bold mb-3 text-center">
+          Espace partenaires <br /> Constance Cellier
+        </h1>
         <p className="text-sm mb-2 text-center">
           Connectez-vous pour créer des devis, suivre vos commandes et consulter votre historique.
         </p>

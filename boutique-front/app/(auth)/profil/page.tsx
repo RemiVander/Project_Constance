@@ -8,6 +8,7 @@ type BoutiqueProfile = {
   id: number;
   nom: string;
   email: string;
+  doit_changer_mdp: boolean;
   gerant?: string | null;
   telephone?: string | null;
   adresse?: string | null;
@@ -91,19 +92,29 @@ export default function ProfilPage() {
     }
 
     setSavingPwd(true);
-    try {
-      await apiFetch("/api/boutique/change-password", {
-        method: "POST",
-        body: JSON.stringify({
-          old_password: oldPassword,
-          new_password: newPassword,
-        }),
-      });
+  try {
+    await apiFetch("/api/boutique/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        old_password: oldPassword,
+        new_password: newPassword,
+      }),
+    });
 
-      setPwdSuccess("Mot de passe mis à jour.");
-      setOldPassword("");
-      setNewPassword("");
-      setNewPasswordConfirm("");
+    setPwdSuccess("Mot de passe mis à jour.");
+
+    const wasForced = !!profil?.doit_changer_mdp;
+
+    const me = await apiFetch("/api/boutique/me");
+    setProfil(me);
+
+    if (wasForced && me && !me.doit_changer_mdp) {
+      router.replace("/dashboard");
+    }
+
+    setOldPassword("");
+    setNewPassword("");
+    setNewPasswordConfirm("");
     } catch (e: any) {
       setPwdError(e?.message || "Impossible de modifier le mot de passe.");
     } finally {
@@ -131,6 +142,11 @@ export default function ProfilPage() {
           <p className="text-sm text-slate-600">
             Modifiez les informations de votre boutique. La TVA est gérée par l’administration.
           </p>
+          {profil.doit_changer_mdp && (
+            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+              🔐 Pour des raisons de sécurité, merci de définir un nouveau mot de passe avant de continuer.
+            </div>
+          )}
         </div>
 
         {/* ===================== PROFIL ===================== */}
