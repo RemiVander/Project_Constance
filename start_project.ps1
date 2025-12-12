@@ -12,3 +12,13 @@ docker compose up -d
 # 3. Affichage de l'état des conteneurs
 Write-Host "==> Conteneurs actifs :" -ForegroundColor Green
 docker compose ps
+
+Write-Host ""
+Write-Host "========================================"
+Write-Host " Projet Constance démarré"
+Write-Host "----------------------------------------"
+Write-Host " API        : http://localhost:8000"
+Write-Host " Front      : http://localhost:3000"
+Write-Host " Serveur mail (smtp4dev) : http://localhost:5000"
+Write-Host "========================================"
+Write-Host ""

@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, Request, Form
+from typing import Literal, Optional
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import secrets
 
+from .utils.mailer import send_boutique_bc_notification
+
 from .database import SessionLocal
 from .auth import get_current_admin, get_password_hash, require_admin
 from . import models
-from .email_utils import send_boutique_password_email
+from app.utils.mailer import send_boutique_password_email
+
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -22,7 +27,12 @@ def get_db():
     finally:
         db.close()
 
-
+class BoutiqueCreateRequest(BaseModel):
+    nom: str
+    email: EmailStr
+    statut: Optional[str] = None
+    numero_tva: Optional[str] = None
+    
 # ========= Auth admin =========
 
 @router.get("/admin/login")
@@ -145,6 +155,7 @@ def boutique_create_form(
 @router.post("/admin/boutiques/create")
 def boutique_create(
     request: Request,
+    background_tasks: BackgroundTasks,
     nom: str = Form(...),
     email: str = Form(...),
     gerant: str = Form(""),
@@ -172,10 +183,11 @@ def boutique_create(
     db.add(boutique)
     db.commit()
 
-    send_boutique_password_email(
-        to_email=email,
-        boutique_name=nom,
-        password=plain_password,
+    background_tasks.add_task(
+        send_boutique_password_email,
+        email,
+        nom,
+        plain_password,
     )
 
     return RedirectResponse(url="/admin/boutiques", status_code=302)
@@ -236,6 +248,27 @@ def boutique_detail(
             "nb_devis": nb_devis,
             "nb_acceptes": nb_acceptes,
             "taux_acceptation": taux_acceptation,
+            "page": "boutiques",
+        },
+    )
+
+@router.get("/admin/boutiques/{boutique_id}/edit", response_class=HTMLResponse)
+def boutique_edit_form(
+    boutique_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    return templates.TemplateResponse(
+        "admin_boutique_edit.html",
+        {
+            "request": request,
+            "admin": admin,
+            "boutique": boutique,
             "page": "boutiques",
         },
     )
@@ -830,3 +863,133 @@ def admin_update_bon_commande(
         url=f"/admin/boutiques/{bon.devis.boutique_id}",
         status_code=302,
     )
+
+# =========================
+# Admin — mail BC
+# =========================
+
+@router.post("/admin/bons-commande/{bon_id}/renvoyer")
+def renvoyer_bc(
+    bon_id: int,
+    background_tasks: BackgroundTasks,
+    commentaire_admin: str = Form(""),
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    bon = db.query(models.BonCommande).get(bon_id)
+    if not bon:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    bon.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
+    bon.commentaire_admin = commentaire_admin.strip() or None
+    db.commit()
+
+    ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
+
+    subject = f"Bon de commande à corriger — {ref}"
+    html = f"""
+    <p>Votre bon de commande <b>{ref}</b> nécessite des corrections.</p>
+    <p><b>Commentaire admin :</b></p>
+    <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
+        {bon.commentaire_admin or "—"}
+    </div>
+    """
+    text = f"Votre bon de commande {ref} doit être corrigé.\nCommentaire admin : {bon.commentaire_admin or '—'}"
+
+    background_tasks.add_task(
+        send_boutique_bc_notification,
+        bon.devis.boutique.email,
+        subject,
+        html,
+        text,
+    )
+
+    return {"ok": True}
+
+# =========================
+# Modifications modèle Boutique
+# =========================
+
+@router.post("/admin/boutiques")
+def create_boutique(
+    payload: BoutiqueCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    # Créer la boutique dans la base de données
+    boutique = models.Boutique(
+        nom=payload.nom,
+        email=payload.email,
+        statut=payload.statut,
+        numero_tva=payload.numero_tva,
+    )
+
+    # Générer un mot de passe temporaire
+    temp_password = secrets.token_urlsafe(8)
+    boutique.mot_de_passe_hash = get_password_hash(temp_password)
+    boutique.doit_changer_mdp = True 
+    db.add(boutique)
+    db.commit()
+
+    # Envoyer un email à la boutique avec le mot de passe temporaire
+    background_tasks.add_task(
+        send_boutique_password_email,
+        boutique.email,
+        boutique.nom,
+        temp_password,
+    )
+
+    return {"ok": True, "boutique": boutique}
+
+# =========================
+# Admin — décision finale BC
+# =========================
+
+class DecisionBCPayload(BaseModel):
+    decision: Literal["ACCEPTE", "REFUSE"]
+    commentaire: Optional[str] = None
+
+
+@router.post("/admin/bons-commande/{bon_id}/decision")
+def decision_bc(
+    bon_id: int,
+    payload: DecisionBCPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    bon = db.query(models.BonCommande).get(bon_id)
+    if not bon:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    bon.statut = (
+        models.StatutBonCommande.ACCEPTE
+        if payload.decision == "ACCEPTE"
+        else models.StatutBonCommande.REFUSE
+    )
+
+    bon.commentaire_admin = payload.commentaire.strip() if payload.commentaire else None
+    db.commit()
+
+    ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
+
+    subject = f"Bon de commande {payload.decision.lower()} — {ref}"
+    html = f"""
+    <p>Votre bon de commande <b>{ref}</b> a été <b>{payload.decision.lower()}</b>.</p>
+    <p><b>Commentaire admin :</b></p>
+    <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
+        {bon.commentaire_admin or "—"}
+    </div>
+    """
+    text = f"Bon de commande {ref} {payload.decision.lower()}.\nCommentaire admin : {bon.commentaire_admin or '—'}"
+
+    background_tasks.add_task(
+        send_boutique_bc_notification,
+        bon.devis.boutique.email,
+        subject,
+        html,
+        text,
+    )
+
+    return {"ok": True}

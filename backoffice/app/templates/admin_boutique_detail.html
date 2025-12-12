@@ -9,6 +9,7 @@
         <p class="font-semibold">{{ boutique.gerant or '-' }}</p>
         <p class="text-sm text-gray-500 mt-2">Email : {{ boutique.email }}</p>
         <p class="text-sm text-gray-500">Téléphone : {{ boutique.telephone or '-' }}</p>
+        <p><strong>N° TVA :</strong> {{ boutique.numero_tva or "-" }}</p>
         <a href="/admin/boutiques/{{ boutique.id }}/edit"
            class="inline-block bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700">
            Modifier la boutique
