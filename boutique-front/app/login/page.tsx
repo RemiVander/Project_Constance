@@ -21,9 +21,9 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Erreur de connexion");
+      setError("Connexion impossible. Veuillez vérifier vos identifiants.");
     } finally {
       setLoading(false);
     }

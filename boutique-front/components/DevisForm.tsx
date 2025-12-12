@@ -155,7 +155,7 @@ export function DevisForm({
         setOptions(data);
       } catch (err: any) {
         if (err?.message?.includes("401")) {
-          router.push("/login");
+          router.replace("/login");
           return;
         }
         setLoadError(err?.message || "Erreur lors du chargement des options");
