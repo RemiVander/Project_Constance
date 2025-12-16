@@ -933,7 +933,7 @@ def get_bon_commande_pdf(
 
 
 # =========================
-# Mailers : mot de passe oublié
+# Mot de passe oublié
 # =========================
 
 class ForgotPasswordPayload(BaseModel):
@@ -951,7 +951,6 @@ def forgot_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    # réponse toujours générique
     b = db.query(models.Boutique).filter(models.Boutique.email == payload.email).first()
     if not b:
         return {"ok": True}
@@ -961,116 +960,8 @@ def forgot_password(
     b.password_reset_expires = datetime.utcnow() + timedelta(hours=2)
     db.commit()
 
-    link = f"{FRONT_BASE_URL}/login/reset?token={token}"
+    link = f"{FRONT_BASE_URL}/reset-password/confirm?token={token}"
     background_tasks.add_task(send_password_reset_email, b.email, link)
-    return {"ok": True}
-
-
-@router.post("/password/reset")
-def reset_password(
-    payload: ResetPasswordPayload,
-    db: Session = Depends(get_db),
-):
-    b = db.query(models.Boutique).filter(models.Boutique.password_reset_token == payload.token).first()
-    if not b or not b.password_reset_expires or b.password_reset_expires < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Lien invalide ou expiré")
-
-    b.mot_de_passe_hash = get_password_hash(payload.new_password)
-    b.doit_changer_mdp = False
-    b.password_reset_token = None
-    b.password_reset_expires = None
-    db.commit()
-
-    return {"ok": True}
-
-
-
-@router.post("/devis/{devis_id}/bon-commande", response_model=BonCommandePublic)
-def create_bon_commande(
-    devis_id: int,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    boutique: models.Boutique = Depends(get_current_boutique),
-):
-    devis = (
-        db.query(models.Devis)
-        .filter(
-            models.Devis.id == devis_id,
-            models.Devis.boutique_id == boutique.id,
-        )
-        .first()
-    )
-    if not devis:
-        raise HTTPException(status_code=404, detail="Devis introuvable")
-
-    # ⚠️ évite de recréer un BC s’il existe déjà
-    bon = (
-        db.query(models.BonCommande)
-        .filter(models.BonCommande.devis_id == devis.id)
-        .first()
-    )
-    if bon:
-        raise HTTPException(status_code=400, detail="Bon de commande déjà créé")
-
-    bon = models.BonCommande(
-        devis_id=devis.id,
-        statut=models.StatutBonCommande.EN_ATTENTE_VALIDATION,
-    )
-    db.add(bon)
-    db.commit()
-    db.refresh(bon)
-
-    # 📧 Mail admin
-    ref = f"{boutique.nom}-{devis.numero_boutique}"
-
-    subject = f"Nouveau bon de commande à valider — {ref}"
-    html_block = f"""
-    <p>La boutique <b>{boutique.nom}</b> a soumis un bon de commande.</p>
-    <p><b>Référence :</b> {ref}</p>
-    """
-    text = f"Nouveau bon de commande soumis par {boutique.nom} ({ref})"
-
-    background_tasks.add_task(
-        send_admin_bc_notification,
-        subject,
-        html_block,
-        text,
-    )
-
-    return bon
-
-
-class ForgotPasswordPayload(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordPayload(BaseModel):
-    token: str
-    new_password: str
-
-
-@router.post("/password/forgot")
-def forgot_password(
-    payload: ForgotPasswordPayload,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    boutique = db.query(models.Boutique).filter(models.Boutique.email == payload.email).first()
-    if not boutique:
-        return {"ok": True}
-
-    token = secrets.token_urlsafe(32)
-    boutique.password_reset_token = token
-    boutique.password_reset_expires = datetime.utcnow() + timedelta(hours=2)
-    db.commit()
-
-    link = f"{FRONT_BASE_URL}/login/reset?token={token}"
-
-    background_tasks.add_task(
-        send_password_reset_email,
-        boutique.email,
-        link,
-    )
 
     return {"ok": True}
 
@@ -1080,9 +971,11 @@ def reset_password(
     payload: ResetPasswordPayload,
     db: Session = Depends(get_db),
 ):
-    boutique = db.query(models.Boutique).filter(
-        models.Boutique.password_reset_token == payload.token
-    ).first()
+    boutique = (
+        db.query(models.Boutique)
+        .filter(models.Boutique.password_reset_token == payload.token)
+        .first()
+    )
 
     if (
         not boutique
