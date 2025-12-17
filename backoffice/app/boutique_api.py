@@ -1,323 +1,46 @@
 from datetime import datetime, timedelta
 import json
-import os
-from typing import List, Optional, Literal
-
-from fastapi import APIRouter, Depends, HTTPException, Header, Cookie, Response, BackgroundTasks
-from pydantic import BaseModel, EmailStr
-from sqlalchemy.orm import Session
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-
 import secrets
+from typing import List, Optional
 
-from .pdf_utils import generate_pdf_devis_bon
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from . import models
+from .auth import get_password_hash, verify_password
+from .dependencies import get_db
+from .utils.pdf import generate_pdf_devis_bon
 from .utils.mailer import (
     send_admin_bc_notification,
+    send_boutique_password_email,
     send_password_reset_email,
-    send_boutique_password_email
 )
 
-from .database import SessionLocal
-from . import models
-from .auth import get_current_admin, verify_password, get_password_hash
+from .boutique.auth_tokens import create_token_for_boutique, get_current_boutique
+from .boutique.constants import FRONT_BASE_URL, TOKEN_MAX_AGE_SECONDS
+from .boutique.mappers import build_devis_public
+from .boutique.pricing import compute_prix_boutique_et_client
+from .boutique.schemas import (
+    BonCommandePublic,
+    BoutiqueProfileUpdate,
+    BoutiquePublic,
+    ChangePasswordRequest,
+    DevisCreateRequest,
+    DevisPublic,
+    LoginRequest,
+    LoginResponse,
+    MesureTypePublic,
+    MesureValeurPayload,
+    UpdateDevisMesuresPayload,
+    UpdateDevisStatutPayload,
+)
 
 
 router = APIRouter(prefix="/api/boutique", tags=["Boutique API"])
-FRONT_BASE_URL = os.getenv("FRONT_BASE_URL", "http://localhost:3000")
 
-# IMPORTANT : à modifier dans la vraie vie
-SECRET_KEY = "CHANGE_ME_SECRET_KEY"
-TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
-
-TVA_RATE = 0.20
-MARGE_BOUTIQUE = 2.5     # marge boutique sur prix créatrice
-MARGE_CREATRICE = 1.6    # marge créatrice sur coût interne (prix_total)
-
-
-# =========================
-# Helpers prix
-# =========================
-
-def compute_prix_boutique_et_client(devis: models.Devis):
-    """
-    Calcule tous les montants à partir de devis.prix_total (coût interne).
-
-    Retourne un dict :
-    - partenaire_ht / partenaire_tva / partenaire_ttc
-    - client_ht / client_tva / client_ttc
-    """
-    base_ht = devis.prix_total * MARGE_CREATRICE
-
-    partenaire_ht = base_ht
-    partenaire_tva = partenaire_ht * TVA_RATE
-    partenaire_ttc = partenaire_ht + partenaire_tva
-
-    client_ht = partenaire_ht * MARGE_BOUTIQUE
-    client_tva = client_ht * TVA_RATE
-    client_ttc = client_ht + client_tva
-
-    return {
-        "partenaire_ht": partenaire_ht,
-        "partenaire_tva": partenaire_tva,
-        "partenaire_ttc": partenaire_ttc,
-        "client_ht": client_ht,
-        "client_tva": client_tva,
-        "client_ttc": client_ttc,
-    }
-
-
-def get_serializer():
-    return URLSafeTimedSerializer(SECRET_KEY, salt="boutique-auth")
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# =========================
-# Schémas Pydantic
-# =========================
-
-class BoutiquePublic(BaseModel):
-    id: int
-    nom: str
-    email: EmailStr
-    doit_changer_mdp: bool
-
-    gerant: Optional[str] = None
-    telephone: Optional[str] = None
-    adresse: Optional[str] = None
-    code_postal: Optional[str] = None
-    ville: Optional[str] = None
-    numero_tva: Optional[str] = None
-
-    class Config:
-        orm_mode = True
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    boutique: BoutiquePublic
-
-
-class LigneDevisCreate(BaseModel):
-    robe_modele_id: Optional[int] = None
-    description: Optional[str] = None
-    quantite: int = 1
-    prix_unitaire: float
-
-
-class DevisCreateRequest(BaseModel):
-    lignes: List[LigneDevisCreate]
-    configuration: dict | None = None
-    dentelle_id: int | None = None
-
-
-class LigneDevisPublic(BaseModel):
-    id: int
-    robe_modele_id: Optional[int] = None
-    description: Optional[str]
-    quantite: int
-    prix_unitaire: float
-
-    model_config = {"from_attributes": True}
-
-
-class MesureValeurPublic(BaseModel):
-    mesure_type_id: int
-    valeur: float | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class DevisPublic(BaseModel):
-    id: int
-    numero_boutique: int
-    statut: str
-    date_creation: Optional[str]
-    prix_total: float
-    prix_boutique: float
-    prix_client_conseille_ttc: float
-    configuration: dict | None = None
-    dentelle_id: int | None = None
-    lignes: Optional[List["LigneDevisPublic"]] = None
-    mesures: Optional[List["MesureValeurPublic"]] = None
-
-    model_config = {"from_attributes": True}
-
-
-class MesureTypePublic(BaseModel):
-    id: int
-    code: str
-    label: str
-    obligatoire: bool
-    ordre: int
-
-    model_config = {"from_attributes": True}
-
-
-class MesureValeurPayload(BaseModel):
-    mesure_type_id: int
-    valeur: float
-
-
-class UpdateDevisStatutPayload(BaseModel):
-    statut: Literal["EN_COURS", "ACCEPTE", "REFUSE"]
-    mesures: Optional[List[MesureValeurPayload]] = None
-
-
-class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
-
-
-class BoutiqueProfileUpdate(BaseModel):
-    nom: Optional[str] = None
-    gerant: Optional[str] = None
-    telephone: Optional[str] = None
-    adresse: Optional[str] = None
-    code_postal: Optional[str] = None
-    ville: Optional[str] = None
-    email: Optional[EmailStr] = None
-
-
-class BonCommandePublic(BaseModel):
-    id: int
-    devis_id: int
-    numero_devis: int
-    date_creation: datetime
-    montant_boutique_ht: float
-    montant_boutique_ttc: float
-    has_tva: bool
-    statut: str
-    commentaire_admin: Optional[str] = None
-    commentaire_boutique: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
-# =========================
-# Auth boutique
-# =========================
-
-def create_token_for_boutique(boutique: models.Boutique) -> str:
-    s = get_serializer()
-    return s.dumps({"boutique_id": boutique.id})
-
-
-def get_current_boutique(
-    db: Session = Depends(get_db),
-    token_cookie: str | None = Cookie(default=None, alias="b2b_token"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
-) -> models.Boutique:
-    """
-    Auth boutique :
-    - en priorité via cookie HttpOnly 'b2b_token'
-    - sinon via header Authorization: Bearer <token>
-    """
-    token: str | None = None
-
-    if token_cookie:
-        token = token_cookie
-    elif authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-
-    if not token:
-        raise HTTPException(status_code=401, detail="Token manquant")
-
-    s = get_serializer()
-    try:
-        data = s.loads(token, max_age=TOKEN_MAX_AGE_SECONDS)
-    except SignatureExpired:
-        raise HTTPException(status_code=401, detail="Token expiré")
-    except BadSignature:
-        raise HTTPException(status_code=401, detail="Token invalide")
-
-    boutique_id = data.get("boutique_id")
-    if not boutique_id:
-        raise HTTPException(status_code=401, detail="Token invalide")
-
-    boutique = db.query(models.Boutique).get(boutique_id)
-    if not boutique:
-        raise HTTPException(status_code=401, detail="Boutique non trouvée")
-
-    if boutique.statut == models.BoutiqueStatut.SUSPENDU:
-        raise HTTPException(status_code=403, detail="Boutique suspendue")
-
-    return boutique
-
-
-# =========================
-# Helpers DevisPublic
-# =========================
-
-def build_devis_public(
-    devis: models.Devis,
-    boutique: models.Boutique,
-    include_lignes: bool = True,
-) -> DevisPublic:
-    prix = compute_prix_boutique_et_client(devis)
-    has_tva = bool(boutique.numero_tva)
-
-    if has_tva:
-        prix_boutique_affiche = prix["partenaire_ht"]
-    else:
-        prix_boutique_affiche = prix["partenaire_ttc"]
-
-    lignes_public: Optional[List[LigneDevisPublic]] = None
-    if include_lignes:
-        lignes_public = [
-            LigneDevisPublic(
-                id=l.id,
-                robe_modele_id=l.robe_modele_id,
-                description=l.description,
-                quantite=l.quantite,
-                prix_unitaire=l.prix_unitaire,
-            )
-            for l in (devis.lignes or [])
-        ]
-
-    mesures_public: Optional[List[MesureValeurPublic]] = None
-    if include_lignes and getattr(devis, "mesures", None):
-        mesures_public = [
-            MesureValeurPublic(
-                mesure_type_id=m.mesure_type_id,
-                valeur=m.valeur,
-            )
-            for m in devis.mesures
-        ]
-
-    config_data: dict | None = None
-    raw_config = getattr(devis, "configuration_json", None)
-    if raw_config:
-        try:
-            config_data = json.loads(raw_config)
-        except Exception:
-            config_data = None
-
-    return DevisPublic(
-        id=devis.id,
-        numero_boutique=devis.numero_boutique,
-        statut=devis.statut.value if hasattr(devis.statut, "value") else str(devis.statut),
-        date_creation=devis.date_creation.isoformat() if devis.date_creation else None,
-        prix_total=devis.prix_total,
-        prix_boutique=prix_boutique_affiche,
-        prix_client_conseille_ttc=prix["client_ttc"],
-        configuration=config_data,
-        dentelle_id=devis.dentelle_id,
-        lignes=lignes_public,
-        mesures=mesures_public,
-    )
+# Note: this file used to contain constants + schemas + helpers.
+# The logic is unchanged; code is now split into app.boutique.* modules.
 
 
 # =========================
@@ -639,11 +362,6 @@ def list_mesure_types(
 # =========================
 # Mesures d'un devis (correction bon de commande)
 # =========================
-
-class UpdateDevisMesuresPayload(BaseModel):
-    mesures: List[MesureValeurPayload]
-    commentaire_boutique: Optional[str] = None  # optionnel : si ton front envoie un commentaire
-
 
 @router.put("/devis/{devis_id}/mesures", response_model=DevisPublic)
 def update_devis_mesures(
