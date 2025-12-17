@@ -75,13 +75,14 @@ def admin_update_bon_commande(
             text_b = f"Votre BC {ref} a été refusé.\nCommentaire de l’atelier : {new_comment or '—'}"
             background_tasks.add_task(send_boutique_bc_notification, to_email, subject_b, html_b, text_b)
 
-        elif "ACCEPTE" in new_statut:
-            subject_b = f"Bon de commande accepté — {ref}"
+        elif "VALIDE" in new_statut:
+            # Règle manquante : quand l’admin valide un BC, prévenir la boutique (même logique que A_MODIFIER / REFUSE).
+            subject_b = f"Bon de commande validé — {ref}"
             html_b = f"""
-            <p>Votre bon de commande a été <b>accepté</b>.</p>
+            <p>Votre bon de commande a été <b>validé</b>.</p>
             <p><b>Référence :</b> {ref}</p>
             """
-            text_b = f"Votre BC {ref} a été accepté."
+            text_b = f"Votre BC {ref} a été validé."
             background_tasks.add_task(send_boutique_bc_notification, to_email, subject_b, html_b, text_b)
 
     return RedirectResponse(
@@ -131,7 +132,8 @@ def renvoyer_bc(
     return {"ok": True}
 
 class DecisionBCPayload(BaseModel):
-    decision: Literal["ACCEPTE", "REFUSE"]
+    # L'état en base est "VALIDE" (certains anciens appels pouvaient envoyer "ACCEPTE").
+    decision: Literal["VALIDE", "ACCEPTE", "REFUSE"]
     commentaire: Optional[str] = None
 
 
@@ -148,9 +150,13 @@ def decision_bc(
     if not bon:
         raise HTTPException(status_code=404, detail="Bon de commande introuvable")
 
+    decision = payload.decision
+    if decision == "ACCEPTE":
+        decision = "VALIDE"
+
     bon.statut = (
-        models.StatutBonCommande.ACCEPTE
-        if payload.decision == "ACCEPTE"
+        models.StatutBonCommande.VALIDE
+        if decision == "VALIDE"
         else models.StatutBonCommande.REFUSE
     )
 
@@ -159,15 +165,15 @@ def decision_bc(
 
     ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
 
-    subject = f"Bon de commande {payload.decision.lower()} — {ref}"
+    subject = f"Bon de commande {decision.lower()} — {ref}"
     html = f"""
-    <p>Votre bon de commande <b>{ref}</b> a été <b>{payload.decision.lower()}</b>.</p>
+    <p>Votre bon de commande <b>{ref}</b> a été <b>{decision.lower()}</b>.</p>
     <p><b>Commentaire admin :</b></p>
     <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
         {bon.commentaire_admin or "—"}
     </div>
     """
-    text = f"Bon de commande {ref} {payload.decision.lower()}.\nCommentaire admin : {bon.commentaire_admin or '—'}"
+    text = f"Bon de commande {ref} {decision.lower()}.\nCommentaire admin : {bon.commentaire_admin or '—'}"
 
     background_tasks.add_task(
         send_boutique_bc_notification,

@@ -1,5 +1,7 @@
 from typing import Optional
 
+from datetime import date, datetime, timedelta
+
 import secrets
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -125,6 +127,10 @@ def boutique_change_statut(
 def boutique_detail(
     boutique_id: int,
     request: Request,
+    devis_statut: Optional[str] = None,
+    bc_statut: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
@@ -132,17 +138,66 @@ def boutique_detail(
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
-    devis = (
-        db.query(models.Devis)
-        .filter(models.Devis.boutique_id == boutique.id)
-        .order_by(models.Devis.date_creation.desc())
-        .all()
+    def _parse_date(s: Optional[str]) -> Optional[date]:
+        if not s:
+            return None
+        try:
+            return date.fromisoformat(s)
+        except Exception:
+            return None
+
+    d_from = _parse_date(date_from)
+    d_to = _parse_date(date_to)
+    dt_from = datetime.combine(d_from, datetime.min.time()) if d_from else None
+    # Inclusif côté UI : on filtre < (date_to + 1 jour)
+    dt_to_excl = (
+        datetime.combine(d_to + timedelta(days=1), datetime.min.time())
+        if d_to
+        else None
     )
 
+    devis_q = db.query(models.Devis).filter(models.Devis.boutique_id == boutique.id)
+    if devis_statut and devis_statut != "ALL":
+        try:
+            devis_q = devis_q.filter(models.Devis.statut == models.StatutDevis(devis_statut))
+        except Exception:
+            pass
+    if dt_from:
+        devis_q = devis_q.filter(models.Devis.date_creation >= dt_from)
+    if dt_to_excl:
+        devis_q = devis_q.filter(models.Devis.date_creation < dt_to_excl)
+
+    devis = devis_q.order_by(models.Devis.date_creation.desc()).all()
+
+    # Indicateurs basés sur la liste filtrée pour être cohérents avec les tableaux.
     total_ca = sum(d.prix_total for d in devis)
     nb_devis = len(devis)
     nb_acceptes = len([d for d in devis if d.statut == models.StatutDevis.ACCEPTE])
     taux_acceptation = (nb_acceptes / nb_devis * 100) if nb_devis else 0
+
+    # Liste des statuts pour les filtres
+    devis_statuts = [s.value for s in models.StatutDevis]
+    bc_statuts = [s.value for s in models.StatutBonCommande]
+
+    # Filtrage BC : on garde la liste de devis pour l'affichage, mais on passera les
+    # paramètres au template et on filtrera la table BC sur la relation.
+    # (On reste simple : le filtre BC s'applique au tableau BC uniquement.)
+    def _bc_matches(bc: models.BonCommande) -> bool:
+        if not bc:
+            return False
+        if bc_statut and bc_statut != "ALL":
+            try:
+                if bc.statut != models.StatutBonCommande(bc_statut):
+                    return False
+            except Exception:
+                pass
+        if dt_from and bc.date_creation and bc.date_creation < dt_from:
+            return False
+        if dt_to_excl and bc.date_creation and bc.date_creation >= dt_to_excl:
+            return False
+        return True
+
+    devis_with_bc_filtered = [d for d in devis if d.bon_commande and _bc_matches(d.bon_commande)]
 
     return templates.TemplateResponse(
         "admin_boutique_detail.html",
@@ -151,10 +206,19 @@ def boutique_detail(
             "admin": admin,
             "boutique": boutique,
             "devis": devis,
+            "devis_with_bc": devis_with_bc_filtered,
             "total_ca": total_ca,
             "nb_devis": nb_devis,
             "nb_acceptes": nb_acceptes,
             "taux_acceptation": taux_acceptation,
+            "filters": {
+                "devis_statut": devis_statut or "ALL",
+                "bc_statut": bc_statut or "ALL",
+                "date_from": d_from.isoformat() if d_from else "",
+                "date_to": d_to.isoformat() if d_to else "",
+            },
+            "devis_statuts": devis_statuts,
+            "bc_statuts": bc_statuts,
             "page": "boutiques",
         },
     )

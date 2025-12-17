@@ -62,6 +62,42 @@
     <p class="text-sm text-gray-500 mt-2">Nombre de devis : {{ nb_devis }}</p>
 </div>
 
+<div class="bg-white rounded shadow p-4 mb-8">
+    <h2 class="text-lg font-semibold mb-3">Filtres</h2>
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">État devis</label>
+            <select name="devis_statut" class="border rounded px-2 py-1 text-sm w-full">
+                <option value="ALL" {% if filters.devis_statut == 'ALL' %}selected{% endif %}>Tous</option>
+                {% for s in devis_statuts %}
+                    <option value="{{ s }}" {% if filters.devis_statut == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">État BC</label>
+            <select name="bc_statut" class="border rounded px-2 py-1 text-sm w-full">
+                <option value="ALL" {% if filters.bc_statut == 'ALL' %}selected{% endif %}>Tous</option>
+                {% for s in bc_statuts %}
+                    <option value="{{ s }}" {% if filters.bc_statut == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">Du</label>
+            <input type="date" name="date_from" value="{{ filters.date_from }}" class="border rounded px-2 py-1 text-sm w-full" />
+        </div>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">Au</label>
+            <input type="date" name="date_to" value="{{ filters.date_to }}" class="border rounded px-2 py-1 text-sm w-full" />
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="bg-blue-600 text-white text-sm px-3 py-2 rounded hover:bg-blue-700 w-full">Appliquer</button>
+            <a href="/admin/boutiques/{{ boutique.id }}" class="bg-gray-100 text-gray-700 text-sm px-3 py-2 rounded hover:bg-gray-200 w-full text-center">Reset</a>
+        </div>
+    </form>
+</div>
+
 <div class="bg-white rounded shadow p-4">
     <h2 class="text-xl font-semibold mb-4">Devis</h2>
     <table class="min-w-full bg-white text-sm">
@@ -112,7 +148,7 @@
         </tr>
         </thead>
         <tbody>
-        {% for d in devis if d.bon_commande %}
+        {% for d in devis_with_bc %}
             {% set bc = d.bon_commande %}
             <tr class="border-t align-top">
                 <td class="px-4 py-2">{{ boutique.nom }}-#{{ d.numero_boutique }}</td>
