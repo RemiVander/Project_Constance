@@ -100,7 +100,24 @@
 </div>
 
 <div class="bg-white rounded shadow p-4">
-    <h2 class="text-xl font-semibold mb-4">Devis</h2>
+    <div class="flex items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-semibold">Devis</h2>
+
+    {% if devis|length > 0 %}
+        <a
+            href="/admin/boutiques/{{ boutique.id }}/devis.csv?devis_statut={{ filters.devis_statut }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}"
+            class="inline-flex items-center px-3 py-2 bg-gray-900 text-white text-sm rounded hover:bg-black"
+        >
+            Exporter CSV
+        </a>
+    {% else %}
+        <span class="text-xs text-gray-400 italic">
+            Aucun devis à exporter
+        </span>
+    {% endif %}
+
+    </div>
+
     <table class="min-w-full bg-white text-sm">
         <thead>
         <tr>
@@ -131,10 +148,29 @@
     </table>
 </div>
 
-<h2 class="text-xl font-semibold mb-2 mt-8">Bons de commande</h2>
-<p class="text-sm text-gray-600 mb-4">
-    Les bons de commande générés à partir des devis acceptés, avec leur statut.
-</p>
+<div class="mt-8 flex items-start justify-between gap-3">
+    <div>
+        <h2 class="text-xl font-semibold mb-2">Bons de commande</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            Les bons de commande générés à partir des devis acceptés, avec leur statut.
+        </p>
+    </div>
+
+    {% if devis_with_bc|length > 0 %}
+        <a
+            href="/admin/boutiques/{{ boutique.id }}/bons-commande.csv?bc_statut={{ filters.bc_statut }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}"
+            class="inline-flex items-center px-3 py-2 bg-gray-900 text-white text-sm rounded hover:bg-black"
+        >
+            Exporter CSV
+        </a>
+    {% else %}
+        <span class="text-xs text-gray-400 italic">
+            Aucun bon de commande à exporter
+        </span>
+    {% endif %}
+
+
+</div>
 
 <div class="overflow-x-auto">
     <table class="min-w-full bg-white rounded shadow text-sm">
