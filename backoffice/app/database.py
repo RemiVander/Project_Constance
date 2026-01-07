@@ -18,3 +18,4 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 from . import models 
+from . import timeline_models

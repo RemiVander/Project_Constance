@@ -146,6 +146,7 @@
             <th class="px-4 py-2 text-left">Statut</th>
             <th class="px-4 py-2 text-left">Commentaire admin / actions</th>
             <th class="px-4 py-2 text-left">Lien PDF</th>
+            <th class="px-4 py-2 text-left">Timeline</th>
         </tr>
         </thead>
         <tbody>
@@ -199,6 +200,13 @@
                        class="text-xs text-blue-600 underline"
                        target="_blank">
                         PDF bon de commande
+                    </a>
+                </td>
+
+                <td class="px-4 py-2">
+                    <a href="/admin/bons-commande/{{ bc.id }}/timeline"
+                       class="text-xs text-blue-600 underline">
+                        Voir
                     </a>
                 </td>
             </tr>

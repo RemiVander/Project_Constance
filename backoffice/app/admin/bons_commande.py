@@ -9,8 +9,16 @@ from .. import models
 from ..auth import get_current_admin
 from ..dependencies import get_db
 from ..utils.mailer import send_admin_bc_notification, send_boutique_bc_notification
+from .common import templates
+
+
+try:
+    from ..timeline import create_event  
+except Exception:  
+    create_event = None 
 
 router = APIRouter()
+
 
 @router.post("/admin/bons-commande/{bon_id}/update")
 def admin_update_bon_commande(
@@ -39,11 +47,24 @@ def admin_update_bon_commande(
 
     bon.commentaire_admin = commentaire_admin.strip() or None
 
-    db.commit()
-
     new_statut = str(bon.statut)
     new_comment = bon.commentaire_admin or ""
     changed = (new_statut != old_statut) or (new_comment != old_comment)
+
+    if changed and create_event:
+        try:
+            create_event(
+                db,
+                bon_commande_id=bon.id,
+                actor_type="ADMIN",
+                actor_id=getattr(admin, "id", None),
+                event_type="BC_MAJ_ADMIN",
+                message=new_comment or f"Statut: {new_statut}",
+            )
+        except Exception:
+            pass
+
+    db.commit()
 
     if changed and background_tasks:
         ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
@@ -76,7 +97,6 @@ def admin_update_bon_commande(
             background_tasks.add_task(send_boutique_bc_notification, to_email, subject_b, html_b, text_b)
 
         elif "VALIDE" in new_statut:
-            # Règle manquante : quand l’admin valide un BC, prévenir la boutique (même logique que A_MODIFIER / REFUSE).
             subject_b = f"Bon de commande validé — {ref}"
             html_b = f"""
             <p>Votre bon de commande a été <b>validé</b>.</p>
@@ -89,6 +109,7 @@ def admin_update_bon_commande(
         url=f"/admin/boutiques/{bon.devis.boutique_id}",
         status_code=302,
     )
+
 
 @router.post("/admin/bons-commande/{bon_id}/renvoyer")
 def renvoyer_bc(
@@ -110,11 +131,24 @@ def renvoyer_bc(
 
     bon.statut = models.StatutBonCommande.A_MODIFIER
     bon.commentaire_admin = commentaire_admin.strip() or None
+
+    if create_event:
+        try:
+            create_event(
+                db,
+                bon_commande_id=bon.id,
+                actor_type="ADMIN",
+                actor_id=getattr(admin, "id", None),
+                event_type="BC_RENVOYE",
+                message=bon.commentaire_admin,
+            )
+        except Exception:
+            pass
+
     db.commit()
 
     ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
 
-    # ✅ Email à la boutique (pas à l’admin)
     subject_b = f"Bon de commande à modifier — {ref}"
     html_b = f"""
     <p>Votre bon de commande nécessite une modification.</p>
@@ -141,10 +175,10 @@ def renvoyer_bc(
     _ = admin
     return {"ok": True}
 
+
 class DecisionBCPayload(BaseModel):
     decision: Literal["VALIDE", "ACCEPTE", "REFUSE"]
     commentaire: Optional[str] = None
-
 
 
 @router.post("/admin/bons-commande/{bon_id}/decision")
@@ -176,6 +210,20 @@ def decision_bc(
     )
 
     bon.commentaire_admin = payload.commentaire.strip() if payload.commentaire else None
+
+    if create_event:
+        try:
+            create_event(
+                db,
+                bon_commande_id=bon.id,
+                actor_type="ADMIN",
+                actor_id=getattr(admin, "id", None),
+                event_type="BC_VALIDE" if bon.statut == models.StatutBonCommande.VALIDE else "BC_REFUSE",
+                message=bon.commentaire_admin,
+            )
+        except Exception:
+            pass
+
     db.commit()
 
     ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
@@ -200,3 +248,44 @@ def decision_bc(
 
     _ = admin
     return {"ok": True}
+
+@router.get("/admin/bons-commande/{bon_id}/timeline")
+def admin_bc_timeline(
+    bon_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    bon = db.query(models.BonCommande).get(bon_id)
+    if not bon:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    boutique = bon.devis.boutique
+    ref = f"{boutique.nom}-{bon.devis.numero_boutique}"
+
+    events = []
+    try:
+        from ..timeline_models import BonCommandeEvent 
+
+        events = (
+            db.query(BonCommandeEvent)
+            .filter(BonCommandeEvent.bon_commande_id == bon.id)
+            .order_by(BonCommandeEvent.created_at.asc(), BonCommandeEvent.id.asc())
+            .all()
+        )
+    except Exception:
+        events = []
+
+    return templates.TemplateResponse(
+        "admin_bon_commande_timeline.html",
+        {
+            "request": request,
+            "admin": admin,
+            "bon": bon,
+            "boutique": boutique,
+            "events": events,
+            "ref": ref,
+            "page": "boutiques",
+        },
+    )
+

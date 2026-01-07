@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Timeline — Bon de commande{% endblock %}
+
+{% block content %}
+
+{% set statut_label = bon.statut.value if bon.statut and bon.statut.value else bon.statut %}
+{% set statut = statut_label %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-bold mb-1">Timeline — Bon de commande {{ ref }}</h1>
+  <div class="text-sm text-gray-600">
+    Boutique :
+    <a class="text-blue-600 underline" href="/admin/boutiques/{{ boutique.id }}">{{ boutique.nom }}</a>
+    · Statut actuel :
+    {% if statut == "EN_ATTENTE_VALIDATION" %}
+      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-800">En attente de validation</span>
+    {% elif statut == "A_MODIFIER" %}
+      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">À modifier (boutique)</span>
+    {% elif statut == "VALIDE" %}
+      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800">Validé</span>
+    {% elif statut == "REFUSE" %}
+      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-rose-100 text-rose-700">Refusé</span>
+    {% else %}
+      <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">{{ statut }}</span>
+    {% endif %}
+  </div>
+</div>
+
+{% set event_labels = {
+  "BC_SOUMIS": "Bon de commande soumis",
+  "BC_RENVOYE": "Bon de commande renvoyé pour correction",
+  "BC_REVALIDE": "Bon de commande revalidé par la boutique",
+  "BC_VALIDE": "Bon de commande validé",
+  "BC_REFUSE": "Bon de commande refusé",
+  "BC_MAJ_ADMIN": "Mise à jour admin"
+} %}
+
+{% set actor_labels = {
+  "ADMIN": "Atelier",
+  "BOUTIQUE": "Boutique",
+  "SYSTEM": "Système"
+} %}
+
+<div class="bg-white rounded shadow p-4">
+  <h2 class="text-lg font-semibold mb-3">Historique</h2>
+
+  {% if events|length == 0 %}
+    <p class="text-sm text-gray-600">Aucun événement enregistré pour le moment.</p>
+  {% else %}
+    <ol class="space-y-3">
+      {% for ev in events %}
+        {% set ev_type = ev.event_type %}
+        {% set actor = ev.actor_type %}
+        <li class="border rounded p-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-sm">
+                {{ event_labels.get(ev_type, ev_type) }}
+              </span>
+
+              <span class="text-xs text-gray-500">·</span>
+
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                {{ actor_labels.get(actor, actor) }}
+              </span>
+            </div>
+
+            <div class="text-xs text-gray-500 whitespace-nowrap">
+              {% if ev.created_at %}{{ ev.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+            </div>
+          </div>
+
+          {% if ev.message %}
+            <div class="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{{ ev.message }}</div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+</div>
+
+<div class="mt-4">
+  <a href="/admin/boutiques/{{ boutique.id }}" class="text-sm text-blue-600 underline">← Retour boutique</a>
+</div>
+
+{% endblock %}
