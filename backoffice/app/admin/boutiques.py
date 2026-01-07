@@ -1,10 +1,11 @@
 from typing import Optional
-
 from datetime import date, datetime, timedelta
-
 import secrets
+import csv
+import io
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -16,12 +17,33 @@ from .common import templates
 
 router = APIRouter()
 
+
 class BoutiqueCreateRequest(BaseModel):
     nom: str
     email: EmailStr
     statut: Optional[str] = None
     numero_tva: Optional[str] = None
-    
+
+
+def _parse_date(s: Optional[str]) -> Optional[date]:
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s)
+    except Exception:
+        return None
+
+
+def _build_date_range(date_from: Optional[str], date_to: Optional[str]):
+    d_from = _parse_date(date_from)
+    d_to = _parse_date(date_to)
+    dt_from = datetime.combine(d_from, datetime.min.time()) if d_from else None
+    dt_to_excl = (
+        datetime.combine(d_to + timedelta(days=1), datetime.min.time())
+        if d_to
+        else None
+    )
+    return d_from, d_to, dt_from, dt_to_excl
 
 
 # ========= Boutiques =========
@@ -138,23 +160,7 @@ def boutique_detail(
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
-    def _parse_date(s: Optional[str]) -> Optional[date]:
-        if not s:
-            return None
-        try:
-            return date.fromisoformat(s)
-        except Exception:
-            return None
-
-    d_from = _parse_date(date_from)
-    d_to = _parse_date(date_to)
-    dt_from = datetime.combine(d_from, datetime.min.time()) if d_from else None
-    # Inclusif côté UI : on filtre < (date_to + 1 jour)
-    dt_to_excl = (
-        datetime.combine(d_to + timedelta(days=1), datetime.min.time())
-        if d_to
-        else None
-    )
+    d_from, d_to, dt_from, dt_to_excl = _build_date_range(date_from, date_to)
 
     devis_q = db.query(models.Devis).filter(models.Devis.boutique_id == boutique.id)
     if devis_statut and devis_statut != "ALL":
@@ -179,9 +185,7 @@ def boutique_detail(
     devis_statuts = [s.value for s in models.StatutDevis]
     bc_statuts = [s.value for s in models.StatutBonCommande]
 
-    # Filtrage BC : on garde la liste de devis pour l'affichage, mais on passera les
-    # paramètres au template et on filtrera la table BC sur la relation.
-    # (On reste simple : le filtre BC s'applique au tableau BC uniquement.)
+    # Filtrage BC : le filtre BC s'applique au tableau BC uniquement.
     def _bc_matches(bc: models.BonCommande) -> bool:
         if not bc:
             return False
@@ -223,6 +227,159 @@ def boutique_detail(
         },
     )
 
+
+# =========================
+# ✅ EXPORT CSV
+# =========================
+
+@router.get("/admin/boutiques/{boutique_id}/devis.csv")
+def export_devis_csv(
+    boutique_id: int,
+    request: Request,
+    devis_statut: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    _, _, dt_from, dt_to_excl = _build_date_range(date_from, date_to)
+
+    devis_q = db.query(models.Devis).filter(models.Devis.boutique_id == boutique.id)
+
+    if devis_statut and devis_statut != "ALL":
+        try:
+            devis_q = devis_q.filter(models.Devis.statut == models.StatutDevis(devis_statut))
+        except Exception:
+            pass
+
+    if dt_from:
+        devis_q = devis_q.filter(models.Devis.date_creation >= dt_from)
+    if dt_to_excl:
+        devis_q = devis_q.filter(models.Devis.date_creation < dt_to_excl)
+
+    devis = devis_q.order_by(models.Devis.date_creation.desc()).all()
+
+    def _gen():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["date_creation", "reference", "statut", "prix_total", "devis_id"])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for d in devis:
+            ref = f"{boutique.nom}-#{d.numero_boutique}"
+            dt = d.date_creation.strftime("%Y-%m-%d %H:%M") if d.date_creation else ""
+            statut = d.statut.value if getattr(d.statut, "value", None) else str(d.statut)
+            writer.writerow([dt, ref, statut, f"{d.prix_total:.2f}", d.id])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"devis_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv".replace(" ", "_")
+    return StreamingResponse(
+        _gen(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/admin/boutiques/{boutique_id}/bons-commande.csv")
+def export_bons_commande_csv(
+    boutique_id: int,
+    request: Request,
+    bc_statut: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    boutique = db.query(models.Boutique).get(boutique_id)
+    if not boutique:
+        return RedirectResponse(url="/admin/boutiques", status_code=302)
+
+    _, _, dt_from, dt_to_excl = _build_date_range(date_from, date_to)
+
+    devis = (
+        db.query(models.Devis)
+        .filter(models.Devis.boutique_id == boutique.id)
+        .order_by(models.Devis.date_creation.desc())
+        .all()
+    )
+
+    def _bc_matches(bc: models.BonCommande) -> bool:
+        if not bc:
+            return False
+        if bc_statut and bc_statut != "ALL":
+            try:
+                if bc.statut != models.StatutBonCommande(bc_statut):
+                    return False
+            except Exception:
+                pass
+        if dt_from and bc.date_creation and bc.date_creation < dt_from:
+            return False
+        if dt_to_excl and bc.date_creation and bc.date_creation >= dt_to_excl:
+            return False
+        return True
+
+    bcs = []
+    for d in devis:
+        bc = getattr(d, "bon_commande", None)
+        if bc and _bc_matches(bc):
+            bcs.append((d, bc))
+
+    def _gen():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "date_creation",
+            "reference",
+            "statut",
+            "montant_boutique_ht",
+            "montant_boutique_ttc",
+            "has_tva",
+            "commentaire_admin",
+            "commentaire_boutique",
+            "bon_commande_id",
+            "devis_id",
+        ])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for d, bc in bcs:
+            ref = f"{boutique.nom}-#{d.numero_boutique}"
+            dt = bc.date_creation.strftime("%Y-%m-%d %H:%M") if bc.date_creation else ""
+            statut = bc.statut.value if getattr(bc.statut, "value", None) else str(bc.statut)
+
+            writer.writerow([
+                dt,
+                ref,
+                statut,
+                f"{(bc.montant_boutique_ht or 0):.2f}",
+                f"{(bc.montant_boutique_ttc or 0):.2f}",
+                "1" if getattr(bc, "has_tva", False) else "0",
+                (getattr(bc, "commentaire_admin", None) or "").replace("\n", "\\n"),
+                (getattr(bc, "commentaire_boutique", None) or "").replace("\n", "\\n"),
+                bc.id,
+                d.id,
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"bons_commande_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv".replace(" ", "_")
+    return StreamingResponse(
+        _gen(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/admin/boutiques/{boutique_id}/edit", response_class=HTMLResponse)
 def boutique_edit_form(
     boutique_id: int,
@@ -243,7 +400,6 @@ def boutique_edit_form(
             "page": "boutiques",
         },
     )
-
 
 
 @router.post("/admin/boutiques/{boutique_id}/edit")
@@ -273,8 +429,6 @@ def boutique_edit(
     return RedirectResponse(url=f"/admin/boutiques/{boutique_id}", status_code=302)
 
 
-
-
 @router.post("/admin/boutiques")
 def create_boutique(
     payload: BoutiqueCreateRequest,
@@ -293,7 +447,7 @@ def create_boutique(
     # Générer un mot de passe temporaire
     temp_password = secrets.token_urlsafe(8)
     boutique.mot_de_passe_hash = get_password_hash(temp_password)
-    boutique.doit_changer_mdp = True 
+    boutique.doit_changer_mdp = True
     db.add(boutique)
     db.commit()
 
