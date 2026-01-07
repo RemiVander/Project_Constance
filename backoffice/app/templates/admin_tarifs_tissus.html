@@ -6,6 +6,7 @@
 <div class="bg-white rounded shadow p-4 mb-6">
     <h2 class="font-semibold mb-2">Ajouter un tarif de tissu</h2>
     <form action="/admin/tarifs/tissus/create" method="post" class="grid grid-cols-1 md:grid-cols-8 gap-4 text-sm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div>
             <label class="block text-xs font-medium mb-1">Catégorie</label>
             <input type="text" name="categorie" required class="w-full border rounded px-2 py-1" placeholder="devant, Dos, Manches...">
@@ -72,6 +73,7 @@
         {% for t in tarifs %}
             <tr class="border-t">
                 <form action="/admin/tarifs/tissus/{{ t.id }}/update" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <td class="px-2 py-1">
                         <input type="text" name="categorie" value="{{ t.categorie }}" class="w-full border rounded px-1 py-0.5">
                     </td>
@@ -105,6 +107,7 @@
                         <button type="submit" class="text-blue-600 mr-2">Sauver</button>
                 </form>
                         <form action="/admin/tarifs/tissus/{{ t.id }}/delete" method="post" class="inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="text-red-600" onclick="return confirm('Supprimer ce tarif ?');">Supprimer</button>
                         </form>
                     </td>

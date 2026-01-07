@@ -42,6 +42,7 @@
         </span>
 
         <form action="/admin/boutiques/{{ boutique.id }}/statut" method="post" class="mt-3 space-y-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label class="block text-sm font-medium">Modifier le statut</label>
             <select name="statut" class="border rounded px-2 py-1 text-sm">
                 <option value="ACTIF" {% if boutique.statut.value == 'ACTIF' %}selected{% endif %}>ACTIF</option>
@@ -172,6 +173,7 @@
                     </div>
 
                     <form method="post" action="/admin/bons-commande/{{ bc.id }}/update" class="space-y-1">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <select name="statut" class="border rounded px-2 py-1 text-xs w-full">
                             <option value="EN_ATTENTE_VALIDATION" {% if s == "EN_ATTENTE_VALIDATION" %}selected{% endif %}>En attente de validation</option>
                             <option value="A_MODIFIER" {% if s == "A_MODIFIER" %}selected{% endif %}>À modifier (boutique)</option>

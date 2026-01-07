@@ -6,6 +6,7 @@
 <div class="bg-white rounded shadow p-4 mb-6">
     <h2 class="font-semibold mb-2">Ajouter un type de mesure</h2>
     <form action="/admin/produits/mesures/create" method="post" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="md:col-span-2">
             <label class="block text-xs font-medium mb-1">Nom affiché</label>
             <input type="text" name="label" required class="w-full border rounded px-2 py-1" placeholder="ex: Tour de poitrine">
@@ -47,6 +48,7 @@
             <tr class="border-b">
                 <td class="px-4 py-2 align-top">
                     <form action="/admin/produits/mesures/{{ m.id }}/update" method="post" class="flex items-center gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="number" name="ordre" value="{{ m.ordre }}" class="w-20 border rounded px-2 py-1 text-sm">
                 </td>
                 <td class="px-4 py-2 align-top text-xs text-gray-500">
@@ -65,6 +67,7 @@
                         <button type="submit" class="text-blue-600 mr-3 text-xs">Sauver</button>
                     </form>
                     <form action="/admin/produits/mesures/{{ m.id }}/delete" method="post" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="text-red-600 text-xs" onclick="return confirm('Supprimer ce type de mesure ?');">
                             Supprimer
                         </button>

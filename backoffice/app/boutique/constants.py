@@ -23,4 +23,4 @@ TVA_RATE: float = float(os.getenv("TVA_RATE", "0.20"))
 # - boutique margin on creator price
 # - creator margin on internal cost (prix_total)
 MARGE_BOUTIQUE: float = float(os.getenv("MARGE_BOUTIQUE", "2.5"))
-MARGE_CREATRICE: float = float(os.getenv("MARGE_CREATRICE", "1.6"))
+MARGE_CREATRICE: float = float(os.getenv("MARGE_CREATRICE", "2"))
