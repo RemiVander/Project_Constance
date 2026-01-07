@@ -1,99 +1,59 @@
 import os
 
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
 
-from . import admin_routes, auth
-from . import boutique_api
-from app.csrf import CSRFMiddleware
-
-# -------------------------------------------------------------------
-# App
-# -------------------------------------------------------------------
-
-app = FastAPI(title="Back-office B2B Robes v4.1")
-
-# -------------------------------------------------------------------
-# ENV / SESSION
-# -------------------------------------------------------------------
-
-ENV = os.getenv("ENV", "").lower()
-IS_PROD = ENV in ("prod", "production")
-
-SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY")
-if not SESSION_SECRET_KEY:
-    # OK en dev, INTERDIT en prod
-    SESSION_SECRET_KEY = "dev-insecure-secret"
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SESSION_SECRET_KEY,
-    https_only=IS_PROD,   # cookies Secure en prod
-    same_site="lax",      # protection CSRF navigateur
-)
-
-# -------------------------------------------------------------------
-# Security headers middleware
-# -------------------------------------------------------------------
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response: Response = await call_next(request)
-
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=()"
-
-        # CSP volontairement permissive pour ne pas casser l’admin
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;"
-        )
-
-        return response
+from .csrf import CSRFMiddleware
+from . import auth
+from .admin.router import router as admin_router
+from .boutique_api import router as boutique_api_router
 
 
-# -------------------------------------------------------------------
-# Middlewares
-# -------------------------------------------------------------------
+def create_app() -> FastAPI:
+    app = FastAPI()
 
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(CSRFMiddleware)
+    # --- Sessions (ADMIN) ---
+    session_secret = os.getenv("SESSION_SECRET_KEY", "dev_insecure_change_me")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret,
+        # En prod: https_only=True
+        https_only=False,
+        same_site="lax",
+    )
 
-origins = [
-    "http://localhost:3000",
-    # "https://front-tondomaine.com",  # à activer en prod
-]
+    # --- CORS (FRONT boutique) ---
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            os.getenv("FRONT_ORIGIN", "http://localhost:3000"),
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    # --- CSRF (ADMIN principalement) ---
+    app.add_middleware(CSRFMiddleware)
 
-# -------------------------------------------------------------------
-# Static & routes
-# -------------------------------------------------------------------
+    # --- Static (CSS/JS admin) ---
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if os.path.isdir(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+    # --- Routes ---
+    app.include_router(auth.router)
+    app.include_router(admin_router)
+    app.include_router(boutique_api_router)
 
-app.include_router(auth.router)
-app.include_router(admin_routes.router)
-app.include_router(boutique_api.router)
+    @app.get("/", include_in_schema=False)
+    def root():
+        return RedirectResponse(url="/admin/login")
 
-# -------------------------------------------------------------------
-# Root
-# -------------------------------------------------------------------
+    return app
 
-@app.get("/")
-def root():
-    return RedirectResponse(url="/admin/login")
+
+app = create_app()

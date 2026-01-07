@@ -1,4 +1,3 @@
-# Project_Constance/backoffice/Dockerfile
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -8,23 +7,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Installer les dépendances Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code de l'app
 COPY app ./app
 COPY scripts ./scripts
 
-# Base SQLite intégrée à l'image
-# (si tu veux garder tes données entre rebuilds, on ajustera avec un volume + init script)
-RUN python -m scripts.init_db && python -m scripts.create_admin_and_sample
+ENV DATABASE_URL=sqlite:////data/robes_demi_mesure.db
 
-# Par défaut on utilise SQLite dans le conteneur
-ENV DATABASE_URL=sqlite:///./robes_demi_mesure.db
+COPY entrypoint.sh /entrypoint.sh
 
-# Si tu préfères que la DB soit à part :
-# ENV DATABASE_URL=sqlite:////data/robes_demi_mesure.db
+RUN sed -i 's/\r$//' /entrypoint.sh \
+    && chmod +x /entrypoint.sh \
+    && mkdir -p /data
 
-# Lancement de l'API
+ENTRYPOINT ["sh", "/entrypoint.sh"]
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

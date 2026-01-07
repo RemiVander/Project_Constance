@@ -7,10 +7,17 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=sqlite:///./robes_demi_mesure.db
+      - DATABASE_URL=sqlite:////data/robes_demi_mesure.db
+
       - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+
+      - SEED_SAMPLE_DATA=0
+    volumes:
+      - constance_db:/data
     ports:
       - "8000:8000"
+    depends_on:
+      - smtp
 
   front:
     build:
@@ -33,3 +40,5 @@ services:
       - "5000:80"   # UI web
       - "2525:25"   # SMTP
 
+volumes:
+  constance_db:
