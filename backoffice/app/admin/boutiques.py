@@ -38,12 +38,37 @@ def _build_date_range(date_from: Optional[str], date_to: Optional[str]):
     d_from = _parse_date(date_from)
     d_to = _parse_date(date_to)
     dt_from = datetime.combine(d_from, datetime.min.time()) if d_from else None
+    # Inclusif côté UI : on filtre < (date_to + 1 jour)
     dt_to_excl = (
         datetime.combine(d_to + timedelta(days=1), datetime.min.time())
         if d_to
         else None
     )
     return d_from, d_to, dt_from, dt_to_excl
+
+
+def _csv_stream(rows_iter, header):
+    """
+    CSV robuste pour Excel FR:
+    - UTF-8 BOM
+    - séparateur ';'
+    """
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+
+    # BOM UTF-8 (Excel-friendly)
+    yield "\ufeff"
+
+    writer.writerow(header)
+    yield output.getvalue()
+    output.seek(0)
+    output.truncate(0)
+
+    for row in rows_iter:
+        writer.writerow(row)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
 
 
 # ========= Boutiques =========
@@ -114,13 +139,7 @@ def boutique_create(
     db.add(boutique)
     db.commit()
 
-    background_tasks.add_task(
-        send_boutique_password_email,
-        email,
-        nom,
-        plain_password,
-    )
-
+    background_tasks.add_task(send_boutique_password_email, email, nom, plain_password)
     return RedirectResponse(url="/admin/boutiques", status_code=302)
 
 
@@ -175,17 +194,14 @@ def boutique_detail(
 
     devis = devis_q.order_by(models.Devis.date_creation.desc()).all()
 
-    # Indicateurs basés sur la liste filtrée pour être cohérents avec les tableaux.
     total_ca = sum(d.prix_total for d in devis)
     nb_devis = len(devis)
     nb_acceptes = len([d for d in devis if d.statut == models.StatutDevis.ACCEPTE])
     taux_acceptation = (nb_acceptes / nb_devis * 100) if nb_devis else 0
 
-    # Liste des statuts pour les filtres
     devis_statuts = [s.value for s in models.StatutDevis]
     bc_statuts = [s.value for s in models.StatutBonCommande]
 
-    # Filtrage BC : le filtre BC s'applique au tableau BC uniquement.
     def _bc_matches(bc: models.BonCommande) -> bool:
         if not bc:
             return False
@@ -201,7 +217,9 @@ def boutique_detail(
             return False
         return True
 
-    devis_with_bc_filtered = [d for d in devis if d.bon_commande and _bc_matches(d.bon_commande)]
+    devis_with_bc_filtered = [
+        d for d in devis if d.bon_commande and _bc_matches(d.bon_commande)
+    ]
 
     return templates.TemplateResponse(
         "admin_boutique_detail.html",
@@ -242,6 +260,14 @@ def export_devis_csv(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
+    import re
+
+    def _safe_filename(name: str) -> str:
+        name = (name or "").strip().replace(" ", "_")
+        name = re.sub(r"[^a-zA-Z0-9._-]+", "_", name)
+        name = re.sub(r"_+", "_", name).strip("_")
+        return name or "export.csv"
+
     boutique = db.query(models.Boutique).get(boutique_id)
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
@@ -252,7 +278,9 @@ def export_devis_csv(
 
     if devis_statut and devis_statut != "ALL":
         try:
-            devis_q = devis_q.filter(models.Devis.statut == models.StatutDevis(devis_statut))
+            devis_q = devis_q.filter(
+                models.Devis.statut == models.StatutDevis(devis_statut)
+            )
         except Exception:
             pass
 
@@ -261,30 +289,30 @@ def export_devis_csv(
     if dt_to_excl:
         devis_q = devis_q.filter(models.Devis.date_creation < dt_to_excl)
 
-    devis = devis_q.order_by(models.Devis.date_creation.desc()).all()
+    devis_q = devis_q.order_by(models.Devis.date_creation.desc())
 
-    def _gen():
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["date_creation", "reference", "statut", "prix_total", "devis_id"])
-        yield output.getvalue()
-        output.seek(0)
-        output.truncate(0)
-
-        for d in devis:
+    def rows():
+        for d in devis_q.yield_per(500):
             ref = f"{boutique.nom}-#{d.numero_boutique}"
             dt = d.date_creation.strftime("%Y-%m-%d %H:%M") if d.date_creation else ""
             statut = d.statut.value if getattr(d.statut, "value", None) else str(d.statut)
-            writer.writerow([dt, ref, statut, f"{d.prix_total:.2f}", d.id])
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+            yield [dt, ref, statut, f"{d.prix_total:.2f}", str(d.id)]
 
-    filename = f"devis_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv".replace(" ", "_")
+    filename = _safe_filename(
+        f"devis_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv"
+    )
+
     return StreamingResponse(
-        _gen(),
+        _csv_stream(
+            rows(),
+            ["date_creation", "reference", "statut", "prix_total", "devis_id"],
+        ),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -298,85 +326,87 @@ def export_bons_commande_csv(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
+    import re
+
+    def _safe_filename(name: str) -> str:
+        name = (name or "").strip().replace(" ", "_")
+        name = re.sub(r"[^a-zA-Z0-9._-]+", "_", name)
+        name = re.sub(r"_+", "_", name).strip("_")
+        return name or "export.csv"
+
     boutique = db.query(models.Boutique).get(boutique_id)
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
     _, _, dt_from, dt_to_excl = _build_date_range(date_from, date_to)
 
-    devis = (
-        db.query(models.Devis)
+    q = (
+        db.query(models.BonCommande, models.Devis)
+        .join(models.Devis, models.BonCommande.devis_id == models.Devis.id)
         .filter(models.Devis.boutique_id == boutique.id)
-        .order_by(models.Devis.date_creation.desc())
-        .all()
     )
 
-    def _bc_matches(bc: models.BonCommande) -> bool:
-        if not bc:
-            return False
-        if bc_statut and bc_statut != "ALL":
-            try:
-                if bc.statut != models.StatutBonCommande(bc_statut):
-                    return False
-            except Exception:
-                pass
-        if dt_from and bc.date_creation and bc.date_creation < dt_from:
-            return False
-        if dt_to_excl and bc.date_creation and bc.date_creation >= dt_to_excl:
-            return False
-        return True
+    if bc_statut and bc_statut != "ALL":
+        try:
+            q = q.filter(models.BonCommande.statut == models.StatutBonCommande(bc_statut))
+        except Exception:
+            pass
 
-    bcs = []
-    for d in devis:
-        bc = getattr(d, "bon_commande", None)
-        if bc and _bc_matches(bc):
-            bcs.append((d, bc))
+    if dt_from:
+        q = q.filter(models.BonCommande.date_creation >= dt_from)
+    if dt_to_excl:
+        q = q.filter(models.BonCommande.date_creation < dt_to_excl)
 
-    def _gen():
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow([
-            "date_creation",
-            "reference",
-            "statut",
-            "montant_boutique_ht",
-            "montant_boutique_ttc",
-            "has_tva",
-            "commentaire_admin",
-            "commentaire_boutique",
-            "bon_commande_id",
-            "devis_id",
-        ])
-        yield output.getvalue()
-        output.seek(0)
-        output.truncate(0)
+    q = q.order_by(models.BonCommande.date_creation.desc())
 
-        for d, bc in bcs:
+    def rows():
+        for bc, d in q.yield_per(500):
             ref = f"{boutique.nom}-#{d.numero_boutique}"
             dt = bc.date_creation.strftime("%Y-%m-%d %H:%M") if bc.date_creation else ""
             statut = bc.statut.value if getattr(bc.statut, "value", None) else str(bc.statut)
 
-            writer.writerow([
+            commentaire_admin = (getattr(bc, "commentaire_admin", None) or "").replace("\n", "\\n")
+            commentaire_boutique = (getattr(bc, "commentaire_boutique", None) or "").replace("\n", "\\n")
+
+            yield [
                 dt,
                 ref,
                 statut,
                 f"{(bc.montant_boutique_ht or 0):.2f}",
                 f"{(bc.montant_boutique_ttc or 0):.2f}",
                 "1" if getattr(bc, "has_tva", False) else "0",
-                (getattr(bc, "commentaire_admin", None) or "").replace("\n", "\\n"),
-                (getattr(bc, "commentaire_boutique", None) or "").replace("\n", "\\n"),
-                bc.id,
-                d.id,
-            ])
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+                commentaire_admin,
+                commentaire_boutique,
+                str(bc.id),
+                str(d.id),
+            ]
 
-    filename = f"bons_commande_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv".replace(" ", "_")
+    filename = _safe_filename(
+        f"bons_commande_{boutique.nom}_{date_from or 'all'}_{date_to or 'all'}.csv"
+    )
+
     return StreamingResponse(
-        _gen(),
+        _csv_stream(
+            rows(),
+            [
+                "date_creation",
+                "reference",
+                "statut",
+                "montant_boutique_ht",
+                "montant_boutique_ttc",
+                "has_tva",
+                "commentaire_admin",
+                "commentaire_boutique",
+                "bon_commande_id",
+                "devis_id",
+            ],
+        ),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -436,7 +466,6 @@ def create_boutique(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    # Créer la boutique dans la base de données
     boutique = models.Boutique(
         nom=payload.nom,
         email=payload.email,
@@ -444,14 +473,12 @@ def create_boutique(
         numero_tva=payload.numero_tva,
     )
 
-    # Générer un mot de passe temporaire
     temp_password = secrets.token_urlsafe(8)
     boutique.mot_de_passe_hash = get_password_hash(temp_password)
     boutique.doit_changer_mdp = True
     db.add(boutique)
     db.commit()
 
-    # Envoyer un email à la boutique avec le mot de passe temporaire
     background_tasks.add_task(
         send_boutique_password_email,
         boutique.email,

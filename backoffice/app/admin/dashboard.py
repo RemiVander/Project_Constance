@@ -11,6 +11,7 @@ from .common import templates
 
 router = APIRouter()
 
+
 # ========= Auth admin =========
 
 @router.get("/admin/login")
@@ -59,10 +60,13 @@ def admin_dashboard(
 
     total_boutiques = db.query(func.count(models.Boutique.id)).scalar() or 0
 
+    # ---- Devis (filtrés) ----
     devis_q = db.query(models.Devis)
     if devis_statut and devis_statut != "ALL":
         try:
-            devis_q = devis_q.filter(models.Devis.statut == models.StatutDevis(devis_statut))
+            devis_q = devis_q.filter(
+                models.Devis.statut == models.StatutDevis(devis_statut)
+            )
         except Exception:
             pass
     if dt_from:
@@ -77,13 +81,22 @@ def admin_dashboard(
         .group_by(models.Devis.statut)
         .all()
     )
-    devis_par_statut = {row[0].value: row[1] for row in devis_par_statut_rows}
 
-    # Bonus: indicateur BC (utile pour fiabiliser les chiffres côté atelier)
-    bc_q = db.query(models.BonCommande).join(models.Devis, models.BonCommande.devis_id == models.Devis.id)
+    devis_par_statut = {}
+    for statut_obj, count in devis_par_statut_rows:
+        label = getattr(statut_obj, "value", None) or str(statut_obj)
+        devis_par_statut[label] = count
+
+    # ---- Bons de commande (filtrés) ----
+    bc_q = (
+        db.query(models.BonCommande)
+        .join(models.Devis, models.BonCommande.devis_id == models.Devis.id)
+    )
     if bc_statut and bc_statut != "ALL":
         try:
-            bc_q = bc_q.filter(models.BonCommande.statut == models.StatutBonCommande(bc_statut))
+            bc_q = bc_q.filter(
+                models.BonCommande.statut == models.StatutBonCommande(bc_statut)
+            )
         except Exception:
             pass
     if dt_from:
@@ -123,7 +136,6 @@ def api_devis_par_statut(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    # Même filtrage que le dashboard (via querystring)
     devis_statut = request.query_params.get("devis_statut")
     date_from = request.query_params.get("date_from")
     date_to = request.query_params.get("date_to")
@@ -162,7 +174,7 @@ def api_devis_par_statut(
         .all()
     )
     return {
-        "labels": [r[0].value for r in rows],
+        "labels": [getattr(r[0], "value", None) or str(r[0]) for r in rows],
         "data": [r[1] for r in rows],
     }
 
@@ -197,7 +209,9 @@ def api_ca_par_boutique(
     devis_join = db.query(models.Devis)
     if devis_statut and devis_statut != "ALL":
         try:
-            devis_join = devis_join.filter(models.Devis.statut == models.StatutDevis(devis_statut))
+            devis_join = devis_join.filter(
+                models.Devis.statut == models.StatutDevis(devis_statut)
+            )
         except Exception:
             pass
     if dt_from:
@@ -205,12 +219,14 @@ def api_ca_par_boutique(
     if dt_to_excl:
         devis_join = devis_join.filter(models.Devis.date_creation < dt_to_excl)
 
-    # Sous-requête filtrée pour agréger correctement le CA par boutique
-    devis_sq = devis_join.with_entities(
-        models.Devis.id.label("id"),
-        models.Devis.boutique_id.label("boutique_id"),
-        models.Devis.prix_total.label("prix_total"),
-    ).subquery()
+    devis_sq = (
+        devis_join.with_entities(
+            models.Devis.id.label("id"),
+            models.Devis.boutique_id.label("boutique_id"),
+            models.Devis.prix_total.label("prix_total"),
+        )
+        .subquery()
+    )
 
     rows = (
         db.query(models.Boutique.nom, func.coalesce(func.sum(devis_sq.c.prix_total), 0))
@@ -222,6 +238,3 @@ def api_ca_par_boutique(
         "labels": [r[0] for r in rows],
         "data": [float(r[1]) for r in rows],
     }
-
-
-
