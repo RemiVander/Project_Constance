@@ -102,37 +102,46 @@ def renvoyer_bc(
     if not bon:
         raise HTTPException(status_code=404, detail="Bon de commande introuvable")
 
-    bon.statut = models.StatutBonCommande.EN_ATTENTE_VALIDATION
+    if bon.statut != models.StatutBonCommande.EN_ATTENTE_VALIDATION:
+        raise HTTPException(
+            status_code=400,
+            detail="Ce bon de commande n'est pas en attente de validation.",
+        )
+
+    bon.statut = models.StatutBonCommande.A_MODIFIER
     bon.commentaire_admin = commentaire_admin.strip() or None
     db.commit()
 
     ref = f"{bon.devis.boutique.nom}-{bon.devis.numero_boutique}"
 
-    subject_admin = f"BC renvoyé à la boutique — {ref}"
-    html_admin = f"""
-    <p>Un bon de commande a été renvoyé à la boutique <b>{bon.devis.boutique.nom}</b>.</p>
+    # ✅ Email à la boutique (pas à l’admin)
+    subject_b = f"Bon de commande à modifier — {ref}"
+    html_b = f"""
+    <p>Votre bon de commande nécessite une modification.</p>
     <p><b>Référence :</b> {ref}</p>
-    <p><b>Commentaire admin envoyé :</b></p>
+    <p><b>Commentaire de l'admin :</b></p>
     <div style="white-space:pre-wrap;border:1px solid #eee;padding:12px;border-radius:8px;">
         {bon.commentaire_admin or "—"}
     </div>
+    <p>Merci de corriger puis de revalider le bon de commande depuis votre espace.</p>
     """
-    text_admin = (
-        f"BC renvoyé à la boutique {bon.devis.boutique.nom} ({ref})\n"
+    text_b = (
+        f"Votre bon de commande {ref} nécessite une modification.\n"
         f"Commentaire admin : {bon.commentaire_admin or '—'}"
     )
 
     background_tasks.add_task(
-        send_admin_bc_notification,
-        subject_admin,
-        html_admin,
-        text_admin,
+        send_boutique_bc_notification,
+        bon.devis.boutique.email,
+        subject_b,
+        html_b,
+        text_b,
     )
 
+    _ = admin
     return {"ok": True}
 
 class DecisionBCPayload(BaseModel):
-    # L'état en base est "VALIDE" (certains anciens appels pouvaient envoyer "ACCEPTE").
     decision: Literal["VALIDE", "ACCEPTE", "REFUSE"]
     commentaire: Optional[str] = None
 
@@ -149,6 +158,12 @@ def decision_bc(
     bon = db.query(models.BonCommande).get(bon_id)
     if not bon:
         raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    if bon.statut != models.StatutBonCommande.EN_ATTENTE_VALIDATION:
+        raise HTTPException(
+            status_code=400,
+            detail="Ce bon de commande n'est pas en attente de validation.",
+        )
 
     decision = payload.decision
     if decision == "ACCEPTE":
@@ -183,4 +198,5 @@ def decision_bc(
         text,
     )
 
+    _ = admin
     return {"ok": True}

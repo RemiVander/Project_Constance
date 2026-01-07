@@ -377,6 +377,10 @@ def update_devis_mesures(
     - recalcule le montant du bon de commande
     - remet le bon en EN_ATTENTE_VALIDATION
     - NOTIFIE L'ADMIN (revalidation)
+
+    Garde-fous :
+    - correction autorisée uniquement si un BC existe ET est en statut A_MODIFIER
+    - ne crée jamais un BC "silencieusement"
     """
     devis = (
         db.query(models.Devis)
@@ -386,7 +390,21 @@ def update_devis_mesures(
     if not devis:
         raise HTTPException(status_code=404, detail="Devis introuvable")
 
-    # On remplace toutes les mesures
+    bon = (
+        db.query(models.BonCommande)
+        .filter(models.BonCommande.devis_id == devis.id)
+        .first()
+    )
+    if not bon:
+        raise HTTPException(status_code=404, detail="Bon de commande introuvable")
+
+    if hasattr(models, "StatutBonCommande") and hasattr(bon, "statut"):
+        if bon.statut != models.StatutBonCommande.A_MODIFIER:
+            raise HTTPException(
+                status_code=400,
+                detail="Ce bon de commande n'est pas en attente de correction.",
+            )
+
     devis.mesures.clear()
     db.flush()
 
@@ -404,22 +422,10 @@ def update_devis_mesures(
     montant_boutique_ht = prix["partenaire_ht"]
     montant_boutique_ttc = prix["partenaire_ttc"]
 
-    bon = db.query(models.BonCommande).filter(models.BonCommande.devis_id == devis.id).first()
+    bon.montant_boutique_ht = montant_boutique_ht
+    bon.montant_boutique_ttc = montant_boutique_ttc
+    bon.has_tva = has_tva
 
-    if not bon:
-        bon = models.BonCommande(
-            devis_id=devis.id,
-            montant_boutique_ht=montant_boutique_ht,
-            montant_boutique_ttc=montant_boutique_ttc,
-            has_tva=has_tva,
-        )
-        db.add(bon)
-    else:
-        bon.montant_boutique_ht = montant_boutique_ht
-        bon.montant_boutique_ttc = montant_boutique_ttc
-        bon.has_tva = has_tva
-
-    # commentaire boutique optionnel
     if hasattr(bon, "commentaire_boutique") and payload.commentaire_boutique is not None:
         bon.commentaire_boutique = payload.commentaire_boutique
 
