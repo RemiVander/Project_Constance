@@ -1,55 +1,64 @@
 import secrets
-from starlette.requests import Request
-from starlette.responses import Response, PlainTextResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from typing import Optional
 
-CSRF_SESSION_KEY = "_csrf_token"
-UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+from starlette.status import HTTP_403_FORBIDDEN
+
+CSRF_SESSION_KEY = "csrf_token"
+CSRF_HEADER_NAME = "x-csrf-token"
+
+
+def _get_session(request: Request) -> Optional[dict]:
+    """
+    Retourne la session si SessionMiddleware est installé.
+    Sinon None (et le middleware CSRF doit être non-bloquant).
+    """
+    if "session" not in request.scope:
+        return None
+    return request.session
 
 
 def get_or_create_csrf_token(request: Request) -> str:
-    """
-    Requires SessionMiddleware (request.session) to be enabled.
-    """
-    token = request.session.get(CSRF_SESSION_KEY)
+    session = _get_session(request)
+    if session is None:
+        return secrets.token_urlsafe(32)
+
+    token = session.get(CSRF_SESSION_KEY)
     if not token:
         token = secrets.token_urlsafe(32)
-        request.session[CSRF_SESSION_KEY] = token
+        session[CSRF_SESSION_KEY] = token
     return token
 
 
 def rotate_csrf_token(request: Request) -> str:
+    session = _get_session(request)
     token = secrets.token_urlsafe(32)
-    request.session[CSRF_SESSION_KEY] = token
+    if session is not None:
+        session[CSRF_SESSION_KEY] = token
     return token
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     """
-    Minimal CSRF protection:
-    - For unsafe HTTP methods, requires a CSRF token either:
-      - form field `csrf_token` (application/x-www-form-urlencoded or multipart/form-data)
-      - header `X-CSRF-Token` (useful for fetch/JSON)
-    - Compares with session token.
+    CSRF middleware léger.
+    - Ne plante JAMAIS si SessionMiddleware n'est pas présent.
+    - Protège uniquement les requêtes mutatives (POST/PUT/PATCH/DELETE) côté browser.
     """
 
     async def dispatch(self, request: Request, call_next):
-        if request.method in UNSAFE_METHODS:
-            session_token = request.session.get(CSRF_SESSION_KEY)
-            if not session_token:
-                return PlainTextResponse("CSRF session missing", status_code=403)
+        session = _get_session(request)
+        if session is None:
+            return await call_next(request)
 
-            token = request.headers.get("X-CSRF-Token")
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return await call_next(request)
 
-            # If not in header, try reading from form (only if form content-type)
-            if not token:
-                content_type = request.headers.get("content-type", "")
-                if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
-                    form = await request.form()
-                    token = form.get("csrf_token")
+        session_token = session.get(CSRF_SESSION_KEY)
+        header_token = request.headers.get(CSRF_HEADER_NAME)
 
-            if not token or token != session_token:
-                return PlainTextResponse("Invalid CSRF token", status_code=403)
+        if not session_token or not header_token or header_token != session_token:
+            return Response("CSRF token invalide", status_code=HTTP_403_FORBIDDEN)
 
-        response: Response = await call_next(request)
-        return response
+        return await call_next(request)

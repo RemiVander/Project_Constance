@@ -23,6 +23,16 @@ def get_db():
         db.close()
 
 
+def get_password_hash(password: str) -> str:
+    """
+    Hash un mot de passe pour stockage en base.
+    Utilisé pour :
+    - création boutique (mot de passe temporaire)
+    - reset / changement de mot de passe boutique
+    """
+    return pwd_context.hash(password)
+
+
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
