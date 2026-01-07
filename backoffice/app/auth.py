@@ -1,13 +1,16 @@
-
 from fastapi import APIRouter, Depends, Form, Request, HTTPException
 from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
 from .database import SessionLocal
 from . import models
 
+from app.csrf import get_or_create_csrf_token, rotate_csrf_token
+
 router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
@@ -20,12 +23,21 @@ def get_db():
         db.close()
 
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+@router.get("/admin/login")
+def admin_login_page(request: Request):
+    csrf_token = get_or_create_csrf_token(request)
+
+    error = request.query_params.get("error")
+    error_msg = "Email ou mot de passe incorrect." if error else None
+
+    return templates.TemplateResponse(
+        "admin_login.html",
+        {"request": request, "csrf_token": csrf_token, "error": error_msg},
+    )
 
 
 @router.post("/admin/login")
@@ -44,7 +56,11 @@ def admin_login(
     if not user or not verify_password(mot_de_passe, user.mot_de_passe):
         return RedirectResponse(url="/admin/login?error=1", status_code=302)
 
+    # Anti session fixation + prêt pour MFA
+    request.session.clear()
     request.session["admin_id"] = user.id
+    rotate_csrf_token(request)
+
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
@@ -52,10 +68,17 @@ def get_current_admin(request: Request, db: Session = Depends(get_db)) -> models
     admin_id = request.session.get("admin_id")
     if not admin_id:
         raise HTTPException(status_code=401, detail="Non authentifié")
-    admin = db.query(models.User).filter_by(id=admin_id, type=models.UserType.ADMIN).first()
+
+    admin = (
+        db.query(models.User)
+        .filter_by(id=admin_id, type=models.UserType.ADMIN)
+        .first()
+    )
     if not admin:
         raise HTTPException(status_code=401, detail="Non authentifié")
+
     return admin
+
 
 def require_admin(request: Request):
     """

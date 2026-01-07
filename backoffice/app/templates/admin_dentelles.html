@@ -7,6 +7,7 @@
 <div class="bg-white rounded shadow p-4 mb-6">
     <h2 class="font-semibold mb-2">Ajouter une dentelle</h2>
     <form action="/admin/dentelles/create" method="post" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="md:col-span-2">
             <label class="block text-xs font-medium mb-1">Nom de la dentelle</label>
             <input
@@ -47,6 +48,7 @@
         {% for d in dentelles %}
             <tr class="border-t">
                 <form action="/admin/dentelles/{{ d.id }}/update" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <td class="px-2 py-1">
                         <input
                             type="text"
@@ -79,6 +81,7 @@
                             method="post"
                             class="inline"
                         >
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button
                                 type="submit"
                                 class="text-red-600"

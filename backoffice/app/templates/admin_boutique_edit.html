@@ -5,6 +5,7 @@
 <h1 class="text-2xl font-bold mb-4">Modifier la boutique</h1>
 
 <form method="post" class="space-y-4 max-w-xl">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <div>
     <label class="block text-sm font-medium mb-1">Nom</label>
     <input name="nom" type="text" required
