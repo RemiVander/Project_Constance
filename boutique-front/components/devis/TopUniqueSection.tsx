@@ -97,17 +97,14 @@ export function TopUniqueSection({
                 const newTransfo = getTransfoById(newId);
                 const nbNew = newTransfo?.nb_epaisseurs;
                 if (typeof nbNew === "number") {
-                  setDecoupeDevantId((prev) => {
-                    const current = getTransfoById(prev);
-                    if (
-                      current &&
-                      typeof current.nb_epaisseurs === "number" &&
-                      current.nb_epaisseurs !== nbNew
-                    ) {
-                      return null;
-                    }
-                    return prev;
-                  });
+                  const current = getTransfoById(decoupeDevantId);
+                  if (
+                    current &&
+                    typeof current.nb_epaisseurs === "number" &&
+                    current.nb_epaisseurs !== nbNew
+                  ) {
+                    setDecoupeDevantId(null);
+                  }
                 }
               }}
             >
@@ -164,17 +161,14 @@ export function TopUniqueSection({
                 const newTransfo = getTransfoById(newId);
                 const nbNew = newTransfo?.nb_epaisseurs;
                 if (typeof nbNew === "number") {
-                  setDecoupeDosId((prev) => {
-                    const current = getTransfoById(prev);
-                    if (
-                      current &&
-                      typeof current.nb_epaisseurs === "number" &&
-                      current.nb_epaisseurs !== nbNew
-                    ) {
-                      return null;
-                    }
-                    return prev;
-                  });
+                  const current = getTransfoById(decoupeDosId);
+                  if (
+                    current &&
+                    typeof current.nb_epaisseurs === "number" &&
+                    current.nb_epaisseurs !== nbNew
+                  ) {
+                    setDecoupeDosId(null);
+                  }
                 }
               }}
             >
@@ -249,6 +243,7 @@ export function TopUniqueSection({
           setTissuManchesId={setTissuManchesId}
           getTransfoById={getTransfoById}
           buildTransfoLabel={buildTransfoLabel}
+          getRobeNom={getRobeNom}
           filterTissusManches={filterTissusManches}
           hasError={hasError}
           clearFieldError={clearFieldError}

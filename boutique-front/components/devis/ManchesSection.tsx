@@ -10,6 +10,7 @@ type ManchesSectionProps = {
   setTissuManchesId: (id: number | null) => void;
   getTransfoById: (id: number | null) => TransformationTarif | null;
   buildTransfoLabel: (t: TransformationTarif) => string;
+  getRobeNom?: (robeId: number | null) => string;
   filterTissusManches: () => TissuTarif[];
   hasError: (key: string) => boolean;
   clearFieldError: (keys: string | string[]) => void;
@@ -24,6 +25,7 @@ export function ManchesSection({
   setManchesId,
   setTissuManchesId,
   buildTransfoLabel,
+  getRobeNom,
   filterTissusManches,
   clearFieldError,
   baseSelectClass,
@@ -62,7 +64,7 @@ export function ManchesSection({
       </div>
 
       {/* Tissu manches */}
-      {hasManches && (
+      {manchesId && (
         <div className="mb-3">
           <label
             className="block text-sm font-medium mb-1"
@@ -82,11 +84,16 @@ export function ManchesSection({
             }}
           >
             <option value="">Aucun</option>
-            {filterTissusManches().map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.detail}
-              </option>
-            ))}
+            {filterTissusManches().map((t) => {
+              const robeNom = getRobeNom ? getRobeNom(t.robe_modele_id) : "";
+              const label =
+                (robeNom ? `[${robeNom}] ` : "") + t.detail;
+              return (
+                <option key={t.id} value={t.id}>
+                  {label}
+                </option>
+              );
+            })}
           </select>
         </div>
       )}

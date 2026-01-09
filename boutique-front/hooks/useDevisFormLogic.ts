@@ -79,10 +79,18 @@ export function useDevisFormLogic({
   );
 
   // Filtres
+  // Fonction helper pour exclure les boléros
+  function isBolero(transfo: any): boolean {
+    return (
+      transfo.epaisseur_ou_option &&
+      transfo.epaisseur_ou_option.toLowerCase().includes("boléro")
+    );
+  }
+
   function filterDecoupeDevantOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe devant"
+        (t) => t.categorie === "Découpe devant" && !isBolero(t)
       ) ?? [];
     const nbDecolleteDevant = decDevant?.nb_epaisseurs;
     if (typeof nbDecolleteDevant === "number") {
@@ -98,7 +106,7 @@ export function useDevisFormLogic({
   function filterDecolleteDosOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Décolleté dos"
+        (t) => t.categorie === "Décolleté dos" && !isBolero(t)
       ) ?? [];
     const nbDev = decDevant?.nb_epaisseurs;
     if (typeof nbDev === "number") {
@@ -113,7 +121,7 @@ export function useDevisFormLogic({
   function filterDecoupeDosOptions() {
     let list =
       options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe dos"
+        (t) => t.categorie === "Découpe dos" && !isBolero(t)
       ) ?? [];
 
     const nbDev = decoupeDevant?.nb_epaisseurs;
@@ -139,18 +147,16 @@ export function useDevisFormLogic({
     let list =
       options?.tarifs_tissus?.filter((t) => t.categorie === "Manches") ?? [];
     
-    // Filtrer selon le type de manches choisi (ex: Tulipe -> seulement tissus Tulipe)
+    // Filtrer selon le modèle de robe de la manche choisie
+    // Ex: si on choisit "Manches Tulipe" pour Alizé, on propose les tissus manches Alizé
     if (manchesId) {
       const manchesTransfo = getTransfoById(manchesId);
-      if (manchesTransfo?.finition) {
-        const finitionManches = manchesTransfo.finition.toLowerCase().trim();
-        list = list.filter((t) => {
-          if (!t.forme) return false;
-          const formeTissu = t.forme.toLowerCase().trim();
-          return formeTissu === finitionManches || 
-                 formeTissu.includes(finitionManches) || 
-                 finitionManches.includes(formeTissu);
-        });
+      if (manchesTransfo && manchesTransfo.robe_modele_id !== null && manchesTransfo.robe_modele_id !== undefined) {
+        // Filtrer les tissus qui ont le même robe_modele_id
+        list = list.filter((t) => t.robe_modele_id === manchesTransfo.robe_modele_id);
+      } else {
+        // Si pas de robe_modele_id, ne rien proposer (ou tout proposer selon besoin)
+        list = [];
       }
     }
     
@@ -160,6 +166,18 @@ export function useDevisFormLogic({
   function filterTissusBas() {
     let list =
       options?.tarifs_tissus?.filter((t) => t.categorie === "Bas") ?? [];
+    
+    // Filtrer selon le modèle de robe de la finition bas choisie
+    // Ex: si on choisit "Bas Évasée" pour Alizé, on propose les tissus bas Alizé
+    if (basId && basTransfo) {
+      if (basTransfo.robe_modele_id !== null && basTransfo.robe_modele_id !== undefined) {
+        // Filtrer les tissus qui ont le même robe_modele_id
+        list = list.filter((t) => t.robe_modele_id === basTransfo.robe_modele_id);
+      } else {
+        // Si pas de robe_modele_id, ne rien proposer
+        list = [];
+      }
+    }
     
     // Filtrer selon le nombre d'épaisseurs
     const nbBas = basTransfo?.nb_epaisseurs;
@@ -187,16 +205,6 @@ export function useDevisFormLogic({
           if (!t.forme) return true;
           const formeTissu = t.forme.toLowerCase().trim();
           return !formeTissu.includes("fourreau");
-        });
-      }
-      // Sinon, essayer de faire correspondre la forme avec la finition
-      else {
-        list = list.filter((t) => {
-          if (!t.forme) return true;
-          const formeTissu = t.forme.toLowerCase().trim();
-          return formeTissu === finitionBas || 
-                 formeTissu.includes(finitionBas) || 
-                 finitionBas.includes(formeTissu);
         });
       }
     }

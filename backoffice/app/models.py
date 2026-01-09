@@ -107,6 +107,7 @@ class TransformationTarif(Base):
     est_decollete = Column(Boolean, default=False, nullable=False)
     ceinture_possible = Column(Boolean, default=False, nullable=False)
     nb_epaisseurs = Column(Integer, nullable=True)
+    applicable_top_unique = Column(Boolean, default=False, nullable=False)
 
     robe_modele = relationship("RobeModele", back_populates="tarifs_transformations")
 
@@ -160,6 +161,7 @@ class DevisType(str, Enum):
     ROBE = "ROBE"
     TOP_UNIQUE = "TOP_UNIQUE"
     BAS = "BAS"
+    BOLERO = "BOLERO"
 
 
 class Devis(Base):

@@ -38,7 +38,7 @@ export function CeintureSection({
             <option value="CEINTURE_ECHANTRE_DOS">
               Ceinture + échancré dos
             </option>
-            <option value="CEINTURE_SEULE">Ceinture seule</option>
+            <option value="CEINTURE_SEULE">Ceinture droite devant + dos</option>
             <option value="REMONT_DEVANT_ECHANTRE_DOS">
               Remonté devant + échancré dos
             </option>

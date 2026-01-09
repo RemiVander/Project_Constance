@@ -8,7 +8,7 @@ export default function NouveauDevisChoixPage() {
         Que souhaitez-vous créer ?
       </p>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-2 gap-4">
         <Link
           href="/devis/nouveau/robe"
           className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
@@ -21,22 +21,12 @@ export default function NouveauDevisChoixPage() {
         </Link>
 
         <Link
-          href="/devis/nouveau/top-unique"
+          href="/devis/nouveau/bolero"
           className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
         >
-          <h2 className="font-semibold mb-1">Devis top unique</h2>
+          <h2 className="font-semibold mb-1">Devis boléro seul</h2>
           <p className="text-sm text-gray-600">
-            Top unique seul : dentelle, manches, finitions devant et dos.
-          </p>
-        </Link>
-
-        <Link
-          href="/devis/nouveau/bas"
-          className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
-        >
-          <h2 className="font-semibold mb-1">Devis bas de robe</h2>
-          <p className="text-sm text-gray-600">
-            Bas de robe : finitions bas, tissus bas, finitions supplémentaires et accessoires.
+            Boléro seul : devant, dos et manches en dentelle.
           </p>
         </Link>
       </div>

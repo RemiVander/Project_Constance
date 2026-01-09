@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useDevisOptions, OptionsResponse } from "@/hooks/useDevisOptions";
 import { useDevisFormLogic } from "@/hooks/useDevisFormLogic";
 import { useFormValidation } from "@/hooks/useFormValidation";
@@ -8,17 +8,10 @@ import { usePrixCalculation } from "@/hooks/usePrixCalculation";
 import { DevantDosSection } from "./devis/DevantDosSection";
 import { ManchesSection } from "./devis/ManchesSection";
 import { DentelleSection } from "./devis/DentelleSection";
-import { CeintureSection, ComboTaille } from "./devis/CeintureSection";
+import { CeintureSection, type ComboTaille } from "./devis/CeintureSection";
 import { BasSection } from "./devis/BasSection";
+import { BoleroSection } from "./devis/BoleroSection";
 import { SubmitButton } from "./devis/SubmitButton";
-
-type ComboTaille =
-  | "AUCUNE"
-  | "CEINTURE_ECHANTRE_DOS"
-  | "CEINTURE_SEULE"
-  | "REMONT_DEVANT_ECHANTRE_DOS"
-  | "REMONT_DEVANT_SEULE"
-  | "ECHANCRE_DOS_SEUL";
 
 type DevisConfiguration = {
   decDevantId: number | null;
@@ -35,6 +28,10 @@ type DevisConfiguration = {
   finitionsIds: number[];
   accessoiresIds: number[];
   dentelleChoice: string;
+  hasBolero?: boolean;
+  boleroDevantId?: number | null;
+  boleroDosId?: number | null;
+  boleroManchesId?: number | null;
 };
 
 
@@ -86,6 +83,12 @@ export function DevisForm({
   // "12"   = id de dentelle
   const [dentelleChoice, setDentelleChoice] = useState<string>("");
 
+  // Boléro
+  const [hasBolero, setHasBolero] = useState(false);
+  const [boleroDevantId, setBoleroDevantId] = useState<number | null>(null);
+  const [boleroDosId, setBoleroDosId] = useState<number | null>(null);
+  const [boleroManchesId, setBoleroManchesId] = useState<number | null>(null);
+
   const [saving, setSaving] = useState(false);
   
   // Validation
@@ -101,44 +104,6 @@ export function DevisForm({
     setSaveError,
   } = useFormValidation();
 
-
-  // Logique commune (filtres, helpers)
-  const {
-    getRobeNom,
-    buildTransfoLabel,
-    getTransfoById,
-    getTissuById,
-    decDevant,
-    decDos,
-    decoupeDevant,
-    decoupeDos,
-    basTransfo,
-    tissuDevant,
-    tissuDos,
-    tissuBas,
-    doubleDecolleteAlerte,
-    filterDecoupeDevantOptions,
-    filterDecolleteDosOptions,
-    filterDecoupeDosOptions,
-    filterTissusManches,
-    filterTissusBas,
-    filterTissusDevant,
-    filterTissusDos,
-  } = useDevisFormLogic({
-    options,
-    decDevantId,
-    decDosId,
-    decoupeDevantId,
-    decoupeDosId,
-    manchesId,
-    basId,
-    tissuDevantId,
-    tissuDosId,
-    tissuManchesId,
-    tissuBasId,
-  });
-
-  const hasManches = !!manchesId;
 
   // Pré-remplissage en mode édition à partir de initialDevis.configuration
   useEffect(() => {
@@ -179,6 +144,12 @@ export function DevisForm({
       } else {
         setDentelleChoice("none");
       }
+
+      // Pré-remplissage du boléro
+      setHasBolero(config.hasBolero ?? false);
+      setBoleroDevantId(config.boleroDevantId ?? null);
+      setBoleroDosId(config.boleroDosId ?? null);
+      setBoleroManchesId(config.boleroManchesId ?? null);
 
       return;
     }
@@ -233,8 +204,27 @@ export function DevisForm({
 
   // --- Prix (coût interne) ---
 
-  // Calcul du prix
-  const { coutInterneTotal } = usePrixCalculation({
+  // Calcul du prix (incluant le boléro)
+  const coutInterneBolero = useMemo(() => {
+    if (!options || !hasBolero) return 0;
+    let total = 0;
+    const addTransfo = (id: number | null) => {
+      if (!id) return;
+      const t = getTransfoById(id);
+      if (t) total += t.prix;
+    };
+    const addTissu = (id: number | null) => {
+      if (!id) return;
+      const t = getTissuById(id);
+      if (t) total += t.prix;
+    };
+    addTransfo(boleroDevantId);
+    addTransfo(boleroDosId);
+    addTissu(boleroManchesId);
+    return total;
+  }, [options, hasBolero, boleroDevantId, boleroDosId, boleroManchesId, getTransfoById, getTissuById]);
+
+  const { coutInterneTotal: coutInterneRobe } = usePrixCalculation({
     options,
     transformations: {
       decDevantId,
@@ -256,6 +246,8 @@ export function DevisForm({
     getTransfoById,
     getTissuById,
   });
+
+  const coutInterneTotal = coutInterneRobe + coutInterneBolero;
 
   // --- Submit ---
 
@@ -386,6 +378,18 @@ export function DevisForm({
     addTDesc("Manches", manchesId);
     addTDesc("Bas de robe", basId);
 
+    // Ajouter le boléro si présent
+    if (hasBolero) {
+      addTDesc("Boléro devant", boleroDevantId);
+      addTDesc("Boléro dos", boleroDosId);
+      if (boleroManchesId) {
+        const t = getTissuById(boleroManchesId);
+        if (t) {
+          parts.push(`Boléro manches: ${t.detail}`);
+        }
+      }
+    }
+
     switch (comboTaille) {
       case "CEINTURE_ECHANTRE_DOS":
         parts.push("Découpe taille : ceinture + échancré dos");
@@ -412,7 +416,7 @@ export function DevisForm({
     addTiDesc("Tissu manches", tissuManchesId);
     addTiDesc("Tissu bas", tissuBasId);
 
-    const housse = options.accessoires.find((a) =>
+    const housse = options.accessoires?.find((a) =>
       a.nom.toLowerCase().includes("housse")
     );
     if (housse) {
@@ -428,7 +432,7 @@ export function DevisForm({
       parts.push("Aucune dentelle (confirmé par la boutique)");
     }
 
-    if (finitionsIds.length > 0) {
+    if (finitionsIds.length > 0 && options.finitions_supplementaires) {
       for (const id of finitionsIds) {
         const f = options.finitions_supplementaires.find((x) => x.id === id);
         if (f) {
@@ -441,21 +445,25 @@ export function DevisForm({
       parts.length > 0 ? parts.join(" | ") : "Robe de mariée sur mesure";
 
         const configuration: DevisConfiguration = {
-      decDevantId,
-      decDosId,
-      decoupeDevantId,
-      decoupeDosId,
-      manchesId,
-      basId,
-      comboTaille,
-      tissuDevantId,
-      tissuDosId,
-      tissuManchesId,
-      tissuBasId,
-      finitionsIds,
-      accessoiresIds,
-      dentelleChoice,
-    };
+          decDevantId,
+          decDosId,
+          decoupeDevantId,
+          decoupeDosId,
+          manchesId,
+          basId,
+          comboTaille,
+          tissuDevantId,
+          tissuDosId,
+          tissuManchesId,
+          tissuBasId,
+          finitionsIds,
+          accessoiresIds,
+          dentelleChoice,
+          hasBolero,
+          boleroDevantId,
+          boleroDosId,
+          boleroManchesId,
+        };
 
     const payload: DevisFormSubmitPayload = {
       dentelle_id: selectedDentelleId,
@@ -541,11 +549,43 @@ export function DevisForm({
         />
       )}
 
+      {/* Boléro */}
+      {options && (
+        <BoleroSection
+          options={options}
+          hasBolero={hasBolero}
+          boleroDevantId={boleroDevantId}
+          boleroDosId={boleroDosId}
+          boleroManchesId={boleroManchesId}
+          setHasBolero={setHasBolero}
+          setBoleroDevantId={setBoleroDevantId}
+          setBoleroDosId={setBoleroDosId}
+          setBoleroManchesId={setBoleroManchesId}
+          onBoleroManchesChange={(boleroManchesId) => {
+            // Si on sélectionne des manches de boléro, réinitialiser les manches de robe
+            if (boleroManchesId) {
+              setManchesId(null);
+              setTissuManchesId(null);
+              clearFieldError(["manches", "tissuManches"]);
+            }
+          }}
+          hasError={hasError}
+          clearFieldError={clearFieldError}
+          baseSelectClass={baseSelectClass}
+          classFor={classFor}
+        />
+      )}
+
       {/* Manches + Dentelle */}
       <div className="grid md:grid-cols-2 gap-6 mt-6">
         {/* Manches */}
         <div className="border rounded-xl p-4 bg-white">
           <h2 className="font-semibold mb-3">Manches</h2>
+          {boleroManchesId && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded mb-3">
+              Les manches pour la robe sont désactivées car des manches ont été sélectionnées sur le boléro.
+            </p>
+          )}
 
           {/* Manches */}
           <div className="mb-3">
@@ -560,9 +600,16 @@ export function DevisForm({
               className={baseSelectClass}
               value={manchesId ?? ""}
               onChange={(e) => {
-                setManchesId(e.target.value ? Number(e.target.value) : null);
+                const newManchesId = e.target.value ? Number(e.target.value) : null;
+                setManchesId(newManchesId);
                 clearFieldError("tissuManches");
+                // Si on sélectionne des manches de robe, réinitialiser les manches de boléro
+                if (newManchesId && boleroManchesId) {
+                  setBoleroManchesId(null);
+                  clearFieldError("boleroManches");
+                }
               }}
+              disabled={!!boleroManchesId}
             >
               <option value="">Aucune</option>
               {options.tarifs_transformations
@@ -596,11 +643,16 @@ export function DevisForm({
                 }}
               >
                 <option value="">Aucun</option>
-                {filterTissusManches().map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.detail}
-                  </option>
-                ))}
+                {filterTissusManches().map((t) => {
+                  const robeNom = getRobeNom(t.robe_modele_id);
+                  const label =
+                    (robeNom ? `[${robeNom}] ` : "") + t.detail;
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
