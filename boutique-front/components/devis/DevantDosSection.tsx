@@ -93,23 +93,25 @@ export function DevantDosSection({
               const newTransfo = getTransfoById(newId);
               const nbNew = newTransfo?.nb_epaisseurs;
               if (typeof nbNew === "number") {
-                setDecoupeDevantId((prev) => {
-                  const current = getTransfoById(prev);
-                  if (
-                    current &&
-                    typeof current.nb_epaisseurs === "number" &&
-                    current.nb_epaisseurs !== nbNew
-                  ) {
-                    return null;
-                  }
-                  return prev;
-                });
+                const current = getTransfoById(decoupeDevantId);
+                if (
+                  current &&
+                  typeof current.nb_epaisseurs === "number" &&
+                  current.nb_epaisseurs !== nbNew
+                ) {
+                  setDecoupeDevantId(null);
+                }
               }
             }}
           >
             <option value="">Aucun</option>
             {options.tarifs_transformations
-              .filter((t) => t.categorie === "Décolleté devant")
+              .filter(
+                (t) =>
+                  t.categorie === "Décolleté devant" &&
+                  (!t.epaisseur_ou_option ||
+                    !t.epaisseur_ou_option.toLowerCase().includes("boléro"))
+              )
               .map((t) => (
                 <option key={t.id} value={t.id}>
                   {buildTransfoLabel(t)}
@@ -204,17 +206,14 @@ export function DevantDosSection({
               const newTransfo = getTransfoById(newId);
               const nbNew = newTransfo?.nb_epaisseurs;
               if (typeof nbNew === "number") {
-                setDecoupeDosId((prev) => {
-                  const current = getTransfoById(prev);
-                  if (
-                    current &&
-                    typeof current.nb_epaisseurs === "number" &&
-                    current.nb_epaisseurs !== nbNew
-                  ) {
-                    return null;
-                  }
-                  return prev;
-                });
+                const current = getTransfoById(decoupeDosId);
+                if (
+                  current &&
+                  typeof current.nb_epaisseurs === "number" &&
+                  current.nb_epaisseurs !== nbNew
+                ) {
+                  setDecoupeDosId(null);
+                }
               }
             }}
           >

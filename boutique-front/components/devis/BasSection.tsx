@@ -49,7 +49,7 @@ export function BasSection({
             className="block text-sm font-medium mb-1"
             htmlFor="select-bas"
           >
-            FinitionBas
+            Finition Bas
           </label>
           <select
             id="select-bas"

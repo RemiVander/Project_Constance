@@ -15,6 +15,10 @@ import {
   BasDevisForm,
   BasDevisFormSubmitPayload,
 } from "@/components/BasDevisForm";
+import {
+  BoleroDevisForm,
+  BoleroDevisFormSubmitPayload,
+} from "@/components/BoleroDevisForm";
 import { Breadcrumb } from "@/components/Breadcrumb";
 
 export default function EditDevisPage() {
@@ -134,6 +138,36 @@ export default function EditDevisPage() {
     }
   }
 
+  async function handleUpdateBolero(payload: BoleroDevisFormSubmitPayload) {
+    try {
+      const body = {
+        dentelle_id: payload.dentelle_id,
+        configuration: {
+          ...(initialDevis as any)?.configuration,
+          ...payload.configuration,
+        },
+        type: "BOLERO",
+        lignes: [
+          {
+            robe_modele_id: null,
+            description: payload.description,
+            quantite: 1,
+            prix_unitaire: payload.coutInterneTotal,
+          },
+        ],
+      };
+
+      await apiFetch(`/api/boutique/devis/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+      router.push("/historique");
+    } catch (e: any) {
+      alert(e?.message || "Erreur lors de la mise à jour du devis boléro");
+    }
+  }
+
   if (!id) {
     return <p className="text-sm text-red-600">Identifiant de devis manquant.</p>;
   }
@@ -177,9 +211,10 @@ export default function EditDevisPage() {
     (initialDevis as any)?.configuration?.type ||
     "ROBE";
 
-  const isTopUnique = devisType === "TOP_UNIQUE" || devisType === "BOLERO";
+  const isTopUnique = devisType === "TOP_UNIQUE";
   const isBas = devisType === "BAS";
-  const isRobe = !isTopUnique && !isBas;
+  const isBolero = devisType === "BOLERO";
+  const isRobe = !isTopUnique && !isBas && !isBolero;
 
   const typeLabel =
     isTopUnique
@@ -215,6 +250,12 @@ export default function EditDevisPage() {
           mode="edit"
           initialDevis={initialDevis}
           onSubmit={handleUpdateBas}
+        />
+      ) : isBolero ? (
+        <BoleroDevisForm
+          mode="edit"
+          initialDevis={initialDevis}
+          onSubmit={handleUpdateBolero}
         />
       ) : (
         <DevisForm

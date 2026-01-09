@@ -19,8 +19,21 @@ type Dentelle = {
   actif?: boolean;
 };
 
+type TissuTarif = {
+  id: number;
+  categorie: string;
+  robe_modele_id: number | null;
+  detail: string;
+  forme: string | null;
+  prix: number;
+  nb_epaisseurs?: number | null;
+  mono_epaisseur?: boolean;
+  matiere?: string | null;
+};
+
 type OptionsResponse = {
   tarifs_transformations: TransformationTarif[];
+  tarifs_tissus?: TissuTarif[];
   dentelles: Dentelle[];
 };
 
@@ -56,7 +69,7 @@ export function BoleroDevisForm({
 
   const [devantId, setDevantId] = useState<number | null>(null);
   const [dosId, setDosId] = useState<number | null>(null);
-  const [manchesId, setManchesId] = useState<number | null>(null);
+  const [manchesId, setManchesId] = useState<number | null>(null); // ID du tissu manches en dentelle
 
   const [dentelleChoice, setDentelleChoice] = useState<string>("");
 
@@ -72,6 +85,7 @@ export function BoleroDevisForm({
         )) as OptionsResponse;
         setOptions({
           tarifs_transformations: data.tarifs_transformations,
+          tarifs_tissus: data.tarifs_tissus,
           dentelles: data.dentelles,
         });
       } catch (err: any) {
@@ -121,14 +135,19 @@ export function BoleroDevisForm({
   const coutInterneTotal = useMemo(() => {
     if (!options) return 0;
     let total = 0;
-    const add = (id: number | null) => {
+    const addTransfo = (id: number | null) => {
       if (!id) return;
       const t = options.tarifs_transformations.find((x) => x.id === id);
       if (t) total += t.prix;
     };
-    add(devantId);
-    add(dosId);
-    add(manchesId);
+    const addTissu = (id: number | null) => {
+      if (!id) return;
+      const t = options.tarifs_tissus?.find((x) => x.id === id);
+      if (t) total += t.prix;
+    };
+    addTransfo(devantId);
+    addTransfo(dosId);
+    addTissu(manchesId); // Les manches sont des tissus en dentelle
     return total;
   }, [options, devantId, dosId, manchesId]);
 
@@ -175,17 +194,23 @@ export function BoleroDevisForm({
 
     const parts: string[] = [];
 
-    const labelFor = (id: number | null) => {
+    const labelForTransfo = (id: number | null) => {
       if (!id) return "";
       const t = options.tarifs_transformations.find((x) => x.id === id);
       if (!t) return "";
-      const extra = t.epaisseur_ou_option ? ` – ${t.epaisseur_ou_option}` : "";
-      return `${t.finition ?? ""}${extra}`;
+      return t.finition ?? "";
     };
 
-    const devantLabel = labelFor(devantId);
-    const dosLabel = labelFor(dosId);
-    const manchesLabel = labelFor(manchesId);
+    const labelForTissu = (id: number | null) => {
+      if (!id) return "";
+      const t = options.tarifs_tissus?.find((x) => x.id === id);
+      if (!t) return "";
+      return t.detail ?? "";
+    };
+
+    const devantLabel = labelForTransfo(devantId);
+    const dosLabel = labelForTransfo(dosId);
+    const manchesLabel = labelForTissu(manchesId);
 
     if (devantLabel) parts.push(`Finition devant : ${devantLabel}`);
     if (dosLabel) parts.push(`Finition dos : ${dosLabel}`);
@@ -264,13 +289,15 @@ export function BoleroDevisForm({
             >
               <option value="">Aucune</option>
               {options.tarifs_transformations
-                .filter((t) => t.categorie === "Décolleté devant")
+                .filter(
+                  (t) =>
+                    t.categorie === "Décolleté devant" &&
+                    t.epaisseur_ou_option &&
+                    t.epaisseur_ou_option.toLowerCase().includes("boléro")
+                )
                 .map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.finition}{" "}
-                    {t.epaisseur_ou_option
-                      ? `– ${t.epaisseur_ou_option}`
-                      : ""}
+                    {t.finition}
                   </option>
                 ))}
             </select>
@@ -290,13 +317,15 @@ export function BoleroDevisForm({
             >
               <option value="">Aucune</option>
               {options.tarifs_transformations
-                .filter((t) => t.categorie === "Décolleté dos")
+                .filter(
+                  (t) =>
+                    t.categorie === "Décolleté dos" &&
+                    t.epaisseur_ou_option &&
+                    t.epaisseur_ou_option.toLowerCase().includes("boléro")
+                )
                 .map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.finition}{" "}
-                    {t.epaisseur_ou_option
-                      ? `– ${t.epaisseur_ou_option}`
-                      : ""}
+                    {t.finition}
                   </option>
                 ))}
             </select>
@@ -315,16 +344,32 @@ export function BoleroDevisForm({
               }}
             >
               <option value="">Aucune</option>
-              {options.tarifs_transformations
-                .filter((t) => t.categorie === "Manches")
-                .map((t) => (
+              {(() => {
+                const manchesDentelle =
+                  options.tarifs_tissus?.filter(
+                    (t) =>
+                      t.categorie === "Manches" &&
+                      t.detail &&
+                      t.detail.toLowerCase().includes("dentelle")
+                  ) ?? [];
+                
+                // Grouper par nom (detail) et garder le premier de chaque groupe pour éviter les doublons
+                const seen = new Set<string>();
+                const unique = manchesDentelle.filter((t) => {
+                  const key = t.detail?.toLowerCase().trim() || "";
+                  if (seen.has(key)) {
+                    return false;
+                  }
+                  seen.add(key);
+                  return true;
+                });
+                
+                return unique.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.finition}{" "}
-                    {t.epaisseur_ou_option
-                      ? `– ${t.epaisseur_ou_option}`
-                      : ""}
+                    {t.detail}
                   </option>
-                ))}
+                ));
+              })()}
             </select>
           </div>
         </div>

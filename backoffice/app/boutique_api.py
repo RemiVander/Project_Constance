@@ -180,6 +180,7 @@ def get_options(
                 "est_decollete": t.est_decollete,
                 "ceinture_possible": t.ceinture_possible,
                 "nb_epaisseurs": getattr(t, "nb_epaisseurs", None),
+                "applicable_top_unique": getattr(t, "applicable_top_unique", False),
             }
             for t in transfos
         ],
