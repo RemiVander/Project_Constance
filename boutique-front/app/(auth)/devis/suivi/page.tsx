@@ -23,6 +23,7 @@ export default function SuiviDevisPage() {
   const [filtreStatut, setFiltreStatut] = useState<
     "TOUS" | "EN_COURS" | "ACCEPTE" | "REFUSE"
   >("EN_COURS");
+  const [filtreDate, setFiltreDate] = useState<string>("");
 
   useEffect(() => {
     async function load() {
@@ -100,9 +101,27 @@ export default function SuiviDevisPage() {
     router.push(`/devis/${id}/mesures`);
   }
 
-  const devisFiltres = devis.filter((d) =>
-    filtreStatut === "TOUS" ? true : d.statut === filtreStatut
-  );
+  const devisFiltres = devis.filter((d) => {
+    // Filtre par statut
+    if (filtreStatut !== "TOUS" && d.statut !== filtreStatut) {
+      return false;
+    }
+    // Filtre par date (depuis une date donnée)
+    if (filtreDate) {
+      const dateFiltre = new Date(filtreDate);
+      dateFiltre.setHours(0, 0, 0, 0);
+      if (d.date_creation) {
+        const dateDevis = new Date(d.date_creation);
+        dateDevis.setHours(0, 0, 0, 0);
+        if (dateDevis < dateFiltre) {
+          return false;
+        }
+      } else {
+        return false; // Pas de date = exclure
+      }
+    }
+    return true;
+  });
 
   if (loading) {
     return (
@@ -146,18 +165,37 @@ export default function SuiviDevisPage() {
           interne et client, et téléchargez les PDF.
         </p>
 
-        <div className="flex items-center gap-3 mb-4 text-sm">
-          <span className="text-gray-600">Filtrer par statut :</span>
-          <select
-            value={filtreStatut}
-            onChange={(e) => setFiltreStatut(e.target.value as any)}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            <option value="EN_COURS">En cours</option>
-            <option value="ACCEPTE">Validés</option>
-            <option value="REFUSE">Refusés</option>
-            <option value="TOUS">Tous</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-3 mb-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">Filtrer par statut :</span>
+            <select
+              value={filtreStatut}
+              onChange={(e) => setFiltreStatut(e.target.value as any)}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              <option value="EN_COURS">En cours</option>
+              <option value="ACCEPTE">Validés</option>
+              <option value="REFUSE">Refusés</option>
+              <option value="TOUS">Tous</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">Depuis le :</span>
+            <input
+              type="date"
+              value={filtreDate}
+              onChange={(e) => setFiltreDate(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+            {filtreDate && (
+              <button
+                onClick={() => setFiltreDate("")}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
         </div>
 
         {devisFiltres.length === 0 ? (

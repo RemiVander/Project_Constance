@@ -198,7 +198,13 @@ def get_options(
             for t in tissus
         ],
         "finitions_supplementaires": [
-            {"id": f.id, "nom": f.nom, "prix": f.prix, "est_fente": f.est_fente}
+            {
+                "id": f.id,
+                "nom": f.nom,
+                "prix": f.prix,
+                "est_fente": f.est_fente,
+                "applicable_top_unique": getattr(f, "applicable_top_unique", False),
+            }
             for f in finitions
         ],
         "accessoires": [{"id": a.id, "nom": a.nom, "description": a.description, "prix": a.prix} for a in accessoires],
@@ -264,6 +270,14 @@ def create_devis(
     )
     next_num = (max_num[0] + 1) if max_num else 1
 
+    devis_type = getattr(models, "DevisType", None)
+    type_value = None
+    if devis_type and isinstance(payload.type, str):
+        try:
+            type_value = devis_type(payload.type)
+        except ValueError:
+            type_value = devis_type.ROBE
+
     d = models.Devis(
         boutique_id=boutique.id,
         numero_boutique=next_num,
@@ -271,6 +285,7 @@ def create_devis(
         prix_total=0.0,
         configuration_json=json.dumps(payload.configuration) if payload.configuration is not None else None,
         dentelle_id=payload.dentelle_id,
+        type=type_value or getattr(models.DevisType, "ROBE", None),
     )
 
     db.add(d)
@@ -322,6 +337,12 @@ def update_devis(
         raise HTTPException(status_code=400, detail="Le devis doit contenir au moins une ligne")
 
     d.configuration_json = json.dumps(payload.configuration) if payload.configuration is not None else None
+    # Mise à jour éventuelle du type (robe / boléro) si fourni
+    if hasattr(models, "DevisType") and isinstance(payload.type, str):
+        try:
+            d.type = models.DevisType(payload.type)
+        except ValueError:
+            pass
     d.dentelle_id = payload.dentelle_id
 
     db.query(models.LigneDevis).filter(models.LigneDevis.devis_id == d.id).delete()

@@ -1,67 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-
-type RobeModele = {
-  id: number;
-  nom: string;
-  description?: string | null;
-};
-
-type TransformationTarif = {
-  id: number;
-  categorie: string;
-  finition: string | null;
-  robe_modele_id: number | null;
-  epaisseur_ou_option: string | null;
-  prix: number;
-  est_decollete: boolean;
-  ceinture_possible: boolean;
-  nb_epaisseurs?: number | null;
-};
-
-type TissuTarif = {
-  id: number;
-  categorie: string;
-  robe_modele_id: number | null;
-  detail: string;
-  forme: string | null;
-  prix: number;
-  nb_epaisseurs?: number | null;
-  mono_epaisseur?: boolean;
-  matiere?: string | null;
-};
-
-type FinitionSupp = {
-  id: number;
-  nom: string;
-  prix: number;
-  est_fente: boolean;
-};
-
-type Accessoire = {
-  id: number;
-  nom: string;
-  description?: string | null;
-  prix: number;
-};
-
-type Dentelle = {
-  id: number;
-  nom: string;
-  actif?: boolean;
-};
-
-type OptionsResponse = {
-  robe_modeles: RobeModele[];
-  tarifs_transformations: TransformationTarif[];
-  tarifs_tissus: TissuTarif[];
-  finitions_supplementaires: FinitionSupp[];
-  accessoires: Accessoire[];
-  dentelles: Dentelle[];
-};
+import { useEffect, useState } from "react";
+import { useDevisOptions, OptionsResponse } from "@/hooks/useDevisOptions";
+import { useDevisFormLogic } from "@/hooks/useDevisFormLogic";
+import { useFormValidation } from "@/hooks/useFormValidation";
+import { usePrixCalculation } from "@/hooks/usePrixCalculation";
+import { DevantDosSection } from "./devis/DevantDosSection";
+import { ManchesSection } from "./devis/ManchesSection";
+import { DentelleSection } from "./devis/DentelleSection";
+import { CeintureSection, ComboTaille } from "./devis/CeintureSection";
+import { BasSection } from "./devis/BasSection";
+import { SubmitButton } from "./devis/SubmitButton";
 
 type ComboTaille =
   | "AUCUNE"
@@ -108,11 +57,7 @@ export function DevisForm({
   initialDevis,
   onSubmit,
 }: DevisFormProps) {
-  const router = useRouter();
-
-  const [options, setOptions] = useState<OptionsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { options, loading, loadError } = useDevisOptions();
 
   // Transformations
   const [decDevantId, setDecDevantId] = useState<number | null>(null);
@@ -142,29 +87,58 @@ export function DevisForm({
   const [dentelleChoice, setDentelleChoice] = useState<string>("");
 
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [invalidFields, setInvalidFields] = useState<string[]>([]);
+  
+  // Validation
+  const {
+    invalidFields,
+    saveError,
+    hasError,
+    clearFieldError,
+    setErrors,
+    clearErrors,
+    baseSelectClass,
+    classFor,
+    setSaveError,
+  } = useFormValidation();
 
-  // Chargement des options
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = (await apiFetch(
-          "/api/boutique/options"
-        )) as OptionsResponse;
-        setOptions(data);
-      } catch (err: any) {
-        if (err?.message?.includes("401")) {
-          router.replace("/login");
-          return;
-        }
-        setLoadError(err?.message || "Erreur lors du chargement des options");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [router]);
+
+  // Logique commune (filtres, helpers)
+  const {
+    getRobeNom,
+    buildTransfoLabel,
+    getTransfoById,
+    getTissuById,
+    decDevant,
+    decDos,
+    decoupeDevant,
+    decoupeDos,
+    basTransfo,
+    tissuDevant,
+    tissuDos,
+    tissuBas,
+    doubleDecolleteAlerte,
+    filterDecoupeDevantOptions,
+    filterDecolleteDosOptions,
+    filterDecoupeDosOptions,
+    filterTissusManches,
+    filterTissusBas,
+    filterTissusDevant,
+    filterTissusDos,
+  } = useDevisFormLogic({
+    options,
+    decDevantId,
+    decDosId,
+    decoupeDevantId,
+    decoupeDosId,
+    manchesId,
+    basId,
+    tissuDevantId,
+    tissuDosId,
+    tissuManchesId,
+    tissuBasId,
+  });
+
+  const hasManches = !!manchesId;
 
   // Pré-remplissage en mode édition à partir de initialDevis.configuration
   useEffect(() => {
@@ -217,263 +191,29 @@ export function DevisForm({
     }
   }, [mode, initialDevis, options]);
 
-
-  // Helpers
-  function getRobeNom(robeId: number | null) {
-    if (!options || robeId == null) return "";
-    const robe = options.robe_modeles.find((r) => r.id === robeId);
-    return robe ? robe.nom : "";
-  }
-
-  function buildTransfoLabel(t: TransformationTarif) {
-    const robeNom = getRobeNom(t.robe_modele_id);
-    const baseLabel = t.epaisseur_ou_option
-      ? `${t.finition ?? ""} – ${t.epaisseur_ou_option}`
-      : t.finition ?? "";
-    return robeNom ? `[${robeNom}] ${baseLabel}` : baseLabel;
-  }
-
-  function getTransfoById(id: number | null) {
-    return options?.tarifs_transformations.find((t) => t.id === id) ?? null;
-  }
-
-  function getTissuById(id: number | null) {
-    return options?.tarifs_tissus.find((t) => t.id === id) ?? null;
-  }
-
-  const hasManches = !!manchesId;
-
-  const decDevant = getTransfoById(decDevantId);
-  const decDos = getTransfoById(decDosId);
-  const decoupeDevant = getTransfoById(decoupeDevantId);
-  const decoupeDos = getTransfoById(decoupeDosId);
-  const basTransfo = getTransfoById(basId);
-
-  const tissuDevant = useMemo(
-    () => getTissuById(tissuDevantId),
-    [tissuDevantId, options]
-  );
-  const tissuDos = useMemo(
-    () => getTissuById(tissuDosId),
-    [tissuDosId, options]
-  );
-  const tissuBas = useMemo(
-    () => getTissuById(tissuBasId),
-    [tissuBasId, options]
-  );
-
-  const nbDecoupeDevant = decoupeDevant?.nb_epaisseurs ?? null;
-  const nbDecoupeDos = decoupeDos?.nb_epaisseurs ?? null;
-
-  const doubleDecolleteAlerte = useMemo(
-    () => decDevant?.est_decollete && decDos?.est_decollete,
-    [decDevant, decDos]
-  );
-
-  // --- Filtres transformations / tissus ---
-
-  function filterDecoupeDevantOptions() {
-    let list =
-      options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe devant"
-      ) ?? [];
-    const nbDecolleteDevant = decDevant?.nb_epaisseurs;
-    if (typeof nbDecolleteDevant === "number") {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecolleteDevant
-      );
-    }
-    return list;
-  }
-
-  function filterDecolleteDosOptions() {
-    let list =
-      options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Décolleté dos"
-      ) ?? [];
-    const nbDev = decDevant?.nb_epaisseurs;
-    if (typeof nbDev === "number") {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
-      );
-    }
-    return list;
-  }
-
-  function filterDecoupeDosOptions() {
-    let list =
-      options?.tarifs_transformations.filter(
-        (t) => t.categorie === "Découpe dos"
-      ) ?? [];
-
-    const nbDev = decoupeDevant?.nb_epaisseurs;
-    if (typeof nbDev === "number") {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
-      );
-    }
-
-    const nbDecolleteDos = decDos?.nb_epaisseurs;
-    if (typeof nbDecolleteDos === "number") {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecolleteDos
-      );
-    }
-
-    return list;
-  }
-
-  function filterTissusManches() {
-    return (
-      options?.tarifs_tissus.filter((t) => t.categorie === "Manches") ?? []
-    );
-  }
-
-  function filterTissusBas() {
-    let list =
-      options?.tarifs_tissus.filter((t) => t.categorie === "Bas") ?? [];
-    const nbBas = basTransfo?.nb_epaisseurs;
-    if (nbBas != null) {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs === nbBas
-      );
-    }
-    return list;
-  }
-
-  function filterTissusDevant() {
-    let list =
-      options?.tarifs_tissus.filter(
-        (t) => t.categorie && t.categorie.toLowerCase() === "devant"
-      ) ?? [];
-
-    if (nbDecoupeDevant != null) {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecoupeDevant
-      );
-    }
-
-    return list;
-  }
-
-  function filterTissusDos() {
-    let list =
-      options?.tarifs_tissus.filter((t) => t.categorie === "Dos") ?? [];
-
-    if (nbDecoupeDos != null) {
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" &&
-          t.nb_epaisseurs === nbDecoupeDos
-      );
-    }
-
-    if (tissuDevant?.nb_epaisseurs != null) {
-      const nbDev = tissuDevant.nb_epaisseurs;
-      list = list.filter(
-        (t) =>
-          typeof t.nb_epaisseurs === "number" && t.nb_epaisseurs <= nbDev
-      );
-    }
-
-    if (tissuDevant && tissuDevant.matiere !== "crepe") {
-      list = list.filter((t) => t.matiere !== "crepe");
-    }
-
-    return list;
-  }
-
-  // --- Prix (coût interne) ---
-
-  const coutInterneTotal = useMemo(() => {
-    if (!options) return 0;
-    let total = 0;
-
-    const addT = (id: number | null) => {
-      const t = getTransfoById(id);
-      if (t) total += t.prix;
-    };
-
-    const addTi = (id: number | null) => {
-      const t = getTissuById(id);
-      if (t) total += t.prix;
-    };
-
-    addT(decDevantId);
-    addT(decDosId);
-    addT(decoupeDevantId);
-    addT(decoupeDosId);
-    addT(manchesId);
-    addT(basId);
-
-    const ceintureTransfo = options.tarifs_transformations.find(
-      (t) => t.categorie === "Ceinture"
-    );
-    const remontDevantTransfo = options.tarifs_transformations.find(
-      (t) =>
-        t.categorie === "Découpe taille devant et dos" &&
-        t.epaisseur_ou_option === "Remonté devant"
-    );
-    const echancreDosTransfo = options.tarifs_transformations.find(
-      (t) =>
-        t.categorie === "Découpe taille devant et dos" &&
-        t.epaisseur_ou_option === "Échancré dos"
-    );
-
-    switch (comboTaille) {
-      case "CEINTURE_ECHANTRE_DOS":
-        if (ceintureTransfo) total += ceintureTransfo.prix;
-        if (echancreDosTransfo) total += echancreDosTransfo.prix;
-        break;
-      case "CEINTURE_SEULE":
-        if (ceintureTransfo) total += ceintureTransfo.prix;
-        break;
-      case "REMONT_DEVANT_ECHANTRE_DOS":
-        if (remontDevantTransfo) total += remontDevantTransfo.prix;
-        if (echancreDosTransfo) total += echancreDosTransfo.prix;
-        break;
-      case "REMONT_DEVANT_SEULE":
-        if (remontDevantTransfo) total += remontDevantTransfo.prix;
-        break;
-      case "ECHANCRE_DOS_SEUL":
-        if (echancreDosTransfo) total += echancreDosTransfo.prix;
-        break;
-      case "AUCUNE":
-      default:
-        break;
-    }
-
-    addTi(tissuDevantId);
-    addTi(tissuDosId);
-    addTi(tissuManchesId);
-    addTi(tissuBasId);
-
-    for (const id of finitionsIds) {
-      const f = options.finitions_supplementaires.find((x) => x.id === id);
-      if (f) total += f.prix;
-    }
-
-    for (const id of accessoiresIds) {
-      const a = options.accessoires.find((x) => x.id === id);
-      if (a) total += a.prix;
-    }
-
-    const housse = options.accessoires.find((a) =>
-      a.nom.toLowerCase().includes("housse")
-    );
-    if (housse) total += housse.prix;
-
-    return total;
-  }, [
+  // Logique commune (filtres, helpers)
+  const {
+    getRobeNom,
+    buildTransfoLabel,
+    getTransfoById,
+    getTissuById,
+    decDevant,
+    decDos,
+    decoupeDevant,
+    decoupeDos,
+    basTransfo,
+    tissuDevant,
+    tissuDos,
+    tissuBas,
+    doubleDecolleteAlerte,
+    filterDecoupeDevantOptions,
+    filterDecolleteDosOptions,
+    filterDecoupeDosOptions,
+    filterTissusManches,
+    filterTissusBas,
+    filterTissusDevant,
+    filterTissusDos,
+  } = useDevisFormLogic({
     options,
     decDevantId,
     decDosId,
@@ -485,25 +225,37 @@ export function DevisForm({
     tissuDosId,
     tissuManchesId,
     tissuBasId,
+  });
+
+  const hasManches = !!manchesId;
+
+  // Les fonctions de filtrage sont maintenant dans useDevisFormLogic
+
+  // --- Prix (coût interne) ---
+
+  // Calcul du prix
+  const { coutInterneTotal } = usePrixCalculation({
+    options,
+    transformations: {
+      decDevantId,
+      decDosId,
+      decoupeDevantId,
+      decoupeDosId,
+      manchesId,
+      basId,
+    },
+    tissus: {
+      tissuDevantId,
+      tissuDosId,
+      tissuManchesId,
+      tissuBasId,
+    },
     finitionsIds,
     accessoiresIds,
     comboTaille,
-  ]);
-
-  // --- UI erreurs & helpers ---
-
-  const hasError = (key: string) => invalidFields.includes(key);
-
-  const baseSelectClass = "w-full border rounded px-3 py-2 text-sm";
-  const classFor = (key: string) =>
-    hasError(key)
-      ? `${baseSelectClass} border-red-500 bg-red-50`
-      : baseSelectClass;
-
-  const clearFieldError = (keys: string | string[]) => {
-    const arr = Array.isArray(keys) ? keys : [keys];
-    setInvalidFields((prev) => prev.filter((k) => !arr.includes(k)));
-  };
+    getTransfoById,
+    getTissuById,
+  });
 
   // --- Submit ---
 
@@ -596,15 +348,14 @@ export function DevisForm({
     }
 
     if (newInvalid.length > 0 || coutInterneTotal <= 0) {
-      setInvalidFields([...new Set(newInvalid)]);
-      setSaveError(
+      setErrors(
+        [...new Set(newInvalid)],
         "Merci de remplir tous les champs requis et de corriger les incohérences."
       );
       return;
     }
 
-    setInvalidFields([]);
-    setSaveError(null);
+    clearErrors();
 
     const selectedDentelleId =
       dentelleChoice === "none" || dentelleChoice === ""
@@ -749,117 +500,52 @@ export function DevisForm({
         </p>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* DEVANT */}
+      {options && (
+        <DevantDosSection
+          options={options}
+          decDevantId={decDevantId}
+          decDosId={decDosId}
+          decoupeDevantId={decoupeDevantId}
+          decoupeDosId={decoupeDosId}
+          tissuDevantId={tissuDevantId}
+          tissuDosId={tissuDosId}
+          setDecDevantId={setDecDevantId}
+          setDecDosId={setDecDosId}
+          setDecoupeDevantId={setDecoupeDevantId}
+          setDecoupeDosId={setDecoupeDosId}
+          setTissuDevantId={setTissuDevantId}
+          setTissuDosId={setTissuDosId}
+          getTransfoById={getTransfoById}
+          getTissuById={getTissuById}
+          getRobeNom={getRobeNom}
+          buildTransfoLabel={buildTransfoLabel}
+          filterDecoupeDevantOptions={filterDecoupeDevantOptions}
+          filterDecolleteDosOptions={filterDecolleteDosOptions}
+          filterDecoupeDosOptions={filterDecoupeDosOptions}
+          filterTissusDevant={filterTissusDevant}
+          filterTissusDos={filterTissusDos}
+          hasError={hasError}
+          clearFieldError={clearFieldError}
+          baseSelectClass={baseSelectClass}
+          classFor={classFor}
+          doubleDecolleteAlerte={doubleDecolleteAlerte}
+        />
+      )}
+
+      {/* Découpe taille / Ceinture */}
+      {options && (
+        <CeintureSection
+          comboTaille={comboTaille}
+          setComboTaille={setComboTaille}
+          baseSelectClass={baseSelectClass}
+        />
+      )}
+
+      {/* Manches + Dentelle */}
+      <div className="grid md:grid-cols-2 gap-6 mt-6">
+        {/* Manches */}
         <div className="border rounded-xl p-4 bg-white">
-          <h2 className="font-semibold mb-3">Devant</h2>
-
-          {/* Décolleté devant */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-decollete-devant"
-            >
-              Décolleté devant
-            </label>
-            <select
-              id="select-decollete-devant"
-              className={classFor("decDevant")}
-              value={decDevantId ?? ""}
-              onChange={(e) => {
-                const newId = e.target.value ? Number(e.target.value) : null;
-                setDecDevantId(newId);
-                clearFieldError(["decDevant", "decoupeDevant", "decDos"]);
-
-                const newTransfo = getTransfoById(newId);
-                const nbNew = newTransfo?.nb_epaisseurs;
-                if (typeof nbNew === "number") {
-                  setDecoupeDevantId((prev) => {
-                    const current = getTransfoById(prev);
-                    if (
-                      current &&
-                      typeof current.nb_epaisseurs === "number" &&
-                      current.nb_epaisseurs !== nbNew
-                    ) {
-                      return null;
-                    }
-                    return prev;
-                  });
-                }
-              }}
-            >
-              <option value="">Aucun</option>
-              {options.tarifs_transformations
-                .filter((t) => t.categorie === "Décolleté devant")
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {buildTransfoLabel(t)}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {/* Découpe devant */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-decoupe-devant"
-            >
-              Découpe devant
-            </label>
-            <select
-              id="select-decoupe-devant"
-              className={classFor("decoupeDevant")}
-              value={decoupeDevantId ?? ""}
-              onChange={(e) => {
-                setDecoupeDevantId(
-                  e.target.value ? Number(e.target.value) : null
-                );
-                clearFieldError([
-                  "decoupeDevant",
-                  "decoupeDos",
-                  "tissuDevant",
-                  "decDevant",
-                ]);
-              }}
-            >
-              <option value="">Aucune</option>
-              {filterDecoupeDevantOptions().map((t) => (
-                <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Découpe taille / ceinture */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-decoupe-taille"
-            >
-              Découpe taille devant et dos / ceinture
-            </label>
-            <select
-              id="select-decoupe-taille"
-              className={baseSelectClass}
-              value={comboTaille}
-              onChange={(e) =>
-                setComboTaille(e.target.value as ComboTaille)
-              }
-            >
-              <option value="AUCUNE">Aucune</option>
-              <option value="CEINTURE_ECHANTRE_DOS">
-                Ceinture + échancré dos
-              </option>
-              <option value="CEINTURE_SEULE">Ceinture seule</option>
-              <option value="REMONT_DEVANT_ECHANTRE_DOS">
-                Remonté devant + échancré dos
-              </option>
-              <option value="REMONT_DEVANT_SEULE">Remonté devant seul</option>
-              <option value="ECHANCRE_DOS_SEUL">Échancré dos seul</option>
-            </select>
-          </div>
+          <h2 className="font-semibold mb-3">Manches</h2>
 
           {/* Manches */}
           <div className="mb-3">
@@ -918,345 +604,75 @@ export function DevisForm({
               </select>
             </div>
           )}
-
-          {/* Bas */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-bas"
-            >
-              Bas
-            </label>
-            <select
-              id="select-bas"
-              className={classFor("bas")}
-              value={basId ?? ""}
-              onChange={(e) => {
-                setBasId(e.target.value ? Number(e.target.value) : null);
-                clearFieldError(["bas", "tissuBas"]);
-              }}
-            >
-              <option value="">Aucun</option>
-              {options.tarifs_transformations
-                .filter((t) => t.categorie === "Bas")
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {buildTransfoLabel(t)}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {/* Tissu devant */}
-          <div className="mt-4">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-tissu-devant"
-            >
-              Tissu devant
-            </label>
-            <select
-              id="select-tissu-devant"
-              className={classFor("tissuDevant")}
-              value={tissuDevantId ?? ""}
-              onChange={(e) => {
-                setTissuDevantId(
-                  e.target.value ? Number(e.target.value) : null
-                );
-                clearFieldError(["tissuDevant", "tissuDos"]);
-              }}
-            >
-              <option value="">Aucun</option>
-              {filterTissusDevant().map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.detail}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tissu bas */}
-          <div className="mt-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-tissu-bas"
-            >
-              Tissu bas
-            </label>
-            <select
-              id="select-tissu-bas"
-              className={classFor("tissuBas")}
-              value={tissuBasId ?? ""}
-              onChange={(e) => {
-                setTissuBasId(e.target.value ? Number(e.target.value) : null);
-                clearFieldError(["tissuBas", "bas"]);
-              }}
-            >
-              <option value="">Aucun</option>
-              {filterTissusBas().map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const label =
-                  (robeNom ? `[${robeNom}] ` : "") +
-                  t.detail +
-                  (t.forme ? ` – ${t.forme}` : "");
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
         </div>
 
-        {/* DOS + FINITIONS */}
+        {/* Dentelle */}
         <div className="border rounded-xl p-4 bg-white">
-          <h2 className="font-semibold mb-3">Dos & finitions</h2>
-
-          {/* Décolleté dos */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-decollete-dos"
-            >
-              Décolleté dos
-            </label>
-            <select
-              id="select-decollete-dos"
-              className={classFor("decDos")}
-              value={decDosId ?? ""}
-              onChange={(e) => {
-                const newId = e.target.value ? Number(e.target.value) : null;
-                setDecDosId(newId);
-                clearFieldError(["decDevant", "decDos", "decoupeDos"]);
-
-                const newTransfo = getTransfoById(newId);
-                const nbNew = newTransfo?.nb_epaisseurs;
-                if (typeof nbNew === "number") {
-                  setDecoupeDosId((prev) => {
-                    const current = getTransfoById(prev);
-                    if (
-                      current &&
-                      typeof current.nb_epaisseurs === "number" &&
-                      current.nb_epaisseurs !== nbNew
-                    ) {
-                      return null;
-                    }
-                    return prev;
-                  });
-                }
-              }}
-            >
-              <option value="">Aucun</option>
-              {filterDecolleteDosOptions().map((t) => (
-                <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
+          <h2 className="font-semibold mb-3">Dentelle</h2>
+          <label className="block text-sm font-medium mb-1">
+            Choix de la dentelle
+          </label>
+          <select
+            className={classFor("dentelle")}
+            value={dentelleChoice}
+            onChange={(e) => {
+              const val = e.target.value;
+              setDentelleChoice(val);
+              clearFieldError("dentelle");
+            }}
+          >
+            <option value="">-- Sélectionnez --</option>
+            <option value="none">Aucune dentelle</option>
+            {options.dentelles
+              ?.filter((d) => d.actif === undefined || d.actif === true)
+              .map((d) => (
+                <option key={d.id} value={String(d.id)}>
+                  {d.nom}
                 </option>
               ))}
-            </select>
-          </div>
+          </select>
 
-          {/* Découpe dos */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-decoupe-dos"
-            >
-              Découpe dos
-            </label>
-            <select
-              id="select-decoupe-dos"
-              className={classFor("decoupeDos")}
-              value={decoupeDosId ?? ""}
-              onChange={(e) => {
-                setDecoupeDosId(
-                  e.target.value ? Number(e.target.value) : null
-                );
-                clearFieldError([
-                  "decoupeDevant",
-                  "decoupeDos",
-                  "tissuDos",
-                  "decDos",
-                ]);
-              }}
-            >
-              <option value="">Aucune</option>
-              {filterDecoupeDosOptions().map((t) => (
-                <option key={t.id} value={t.id}>
-                  {buildTransfoLabel(t)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tissu dos */}
-          <div className="mb-3">
-            <label
-              className="block text-sm font-medium mb-1"
-              htmlFor="select-tissu-dos"
-            >
-              Tissu dos
-            </label>
-            <select
-              id="select-tissu-dos"
-              className={classFor("tissuDos")}
-              value={tissuDosId ?? ""}
-              onChange={(e) => {
-                setTissuDosId(e.target.value ? Number(e.target.value) : null);
-                clearFieldError(["tissuDevant", "tissuDos"]);
-              }}
-            >
-              <option value="">Aucun</option>
-              {filterTissusDos().map((t) => {
-                const robeNom = getRobeNom(t.robe_modele_id);
-                const label =
-                  (robeNom ? `[${robeNom}] ` : "") +
-                  t.detail +
-                  (t.forme ? ` – ${t.forme}` : "");
-                return (
-                  <option key={t.id} value={t.id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Finitions supplémentaires */}
-          <div className="mt-4">
-            <label className="block text-sm font-medium mb-1">
-              Finitions supplémentaires
-            </label>
-            <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
-              {options.finitions_supplementaires.map((f) => (
-                <label key={f.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={finitionsIds.includes(f.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        let newList = [...finitionsIds, f.id];
-
-                        if (f.est_fente) {
-                          const autres = options.finitions_supplementaires
-                            .filter((x) => x.est_fente && x.id !== f.id)
-                            .map((x) => x.id);
-
-                          newList = newList.filter(
-                            (id) => !autres.includes(id)
-                          );
-                        }
-
-                        setFinitionsIds(newList);
-                      } else {
-                        setFinitionsIds(
-                          finitionsIds.filter((id) => id !== f.id)
-                        );
-                      }
-                    }}
-                  />
-                  <span>{f.nom}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Accessoires */}
-          <div className="mt-4">
-            <label className="block text-sm font-medium mb-1">
-              Accessoires
-            </label>
-            <div className="space-y-1 border rounded p-2 max-h-40 overflow-y-auto">
-              {options.accessoires.map((a) => {
-                const isHousse = a.nom.toLowerCase().includes("housse");
-
-                return (
-                  <label key={a.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={isHousse || accessoiresIds.includes(a.id)}
-                      disabled={isHousse}
-                      onChange={(e) => {
-                        if (isHousse) return;
-                        if (e.target.checked) {
-                          setAccessoiresIds([...accessoiresIds, a.id]);
-                        } else {
-                          setAccessoiresIds(
-                            accessoiresIds.filter((id) => id !== a.id)
-                          );
-                        }
-                      }}
-                    />
-                    <span>
-                      {a.nom} {isHousse && "(inclus automatiquement)"}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          {dentelleChoice === "none" && (
+            <p className="mt-2 text-xs text-amber-700">
+              Veuillez vous assurer que votre robe ne comporte pas de dentelle.
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Dentelle */}
-      <div className="border rounded-xl p-4 bg-white mt-6">
-        <h2 className="font-semibold mb-3">Dentelle</h2>
-
-        <label className="block text-sm font-medium mb-1">
-          Choix de la dentelle <span className="text-red-500">*</span>
-        </label>
-        <select
-          className={classFor("dentelle")}
-          value={dentelleChoice}
-          onChange={(e) => {
-            const val = e.target.value;
-            setDentelleChoice(val);
-            clearFieldError("dentelle");
-          }}
-        >
-          <option value="">-- Sélectionnez une option --</option>
-          <option value="none">Aucune dentelle</option>
-          {options.dentelles
-            ?.filter((d) => d.actif === undefined || d.actif === true)
-            .map((d) => (
-              <option key={d.id} value={String(d.id)}>
-                {d.nom}
-              </option>
-            ))}
-        </select>
-
-        {dentelleChoice === "none" && (
-          <p className="mt-2 text-xs text-amber-700">
-            Veuillez vous assurer que votre robe ne comporte pas de dentelle.
-          </p>
-        )}
-      </div>
-
-      {/* Alerte double décolleté */}
-      {doubleDecolleteAlerte && (
-        <div className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">
-          Attention : la présence d&apos;un décolleté devant et d&apos;un
-          décolleté dos est déconseillée.
-        </div>
+      {/* Bas de robe */}
+      {options && (
+        <BasSection
+          options={options}
+          basId={basId}
+          tissuBasId={tissuBasId}
+          finitionsIds={finitionsIds}
+          accessoiresIds={accessoiresIds}
+          setBasId={setBasId}
+          setTissuBasId={setTissuBasId}
+          setFinitionsIds={setFinitionsIds}
+          setAccessoiresIds={setAccessoiresIds}
+          getRobeNom={getRobeNom}
+          buildTransfoLabel={buildTransfoLabel}
+          filterTissusBas={filterTissusBas}
+          hasError={hasError}
+          clearFieldError={clearFieldError}
+          baseSelectClass={baseSelectClass}
+          classFor={classFor}
+        />
       )}
 
       {/* CTA */}
-      <div className="border rounded-xl p-6 bg-white flex flex-col items-center gap-2 mt-6">
-        <button
-          type="button"
-          disabled={saving}
-          onClick={handleSubmit}
-          className="mt-2 inline-flex justify-center bg-gray-900 text-white text-sm font-semibold px-6 py-2 rounded-full disabled:opacity-50"
-        >
-          {saving
-            ? mode === "edit"
-              ? "Mise à jour du devis…"
-              : "Création du devis…"
-            : mode === "edit"
-            ? "Enregistrer les modifications"
-            : "Créer le devis"}
-        </button>
-      </div>
+      <SubmitButton
+        saving={saving}
+        mode={mode}
+        onClick={handleSubmit}
+        label={{
+          saving: mode === "edit" ? "Mise à jour du devis…" : "Création du devis…",
+          edit: "Enregistrer les modifications",
+          create: "Créer le devis",
+        }}
+      />
     </>
   );
 }

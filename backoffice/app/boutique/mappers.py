@@ -56,6 +56,7 @@ def build_devis_public(
         id=devis.id,
         numero_boutique=devis.numero_boutique,
         statut=devis.statut.value if hasattr(devis.statut, "value") else str(devis.statut),
+        type=devis.type.value if hasattr(devis.type, "value") else str(getattr(devis, "type", "")) or None,
         date_creation=devis.date_creation.isoformat() if devis.date_creation else None,
         prix_total=devis.prix_total,
         prix_boutique=prix_boutique_affiche,

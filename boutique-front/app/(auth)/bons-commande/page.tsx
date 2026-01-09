@@ -21,6 +21,8 @@ export default function BonsCommandePage() {
   const [bons, setBons] = useState<BonCommande[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [filtreStatut, setFiltreStatut] = useState<string>("TOUS");
+  const [filtreDate, setFiltreDate] = useState<string>("");
 
   useEffect(() => {
     async function load() {
@@ -123,25 +125,82 @@ export default function BonsCommandePage() {
           Retrouvez ici les bons de commande générés à partir de vos devis.
         </p>
 
-        {bons.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Aucun bon de commande pour le moment.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="py-2 pr-4">Devis</th>
-                  <th className="py-2 pr-4">Date</th>
-                  <th className="py-2 pr-4">Montant HT</th>
-                  <th className="py-2 pr-4">Montant TTC</th>
-                  <th className="py-2 pr-4 text-center">Statut</th>
-                  <th className="py-2 pr-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bons.map((b) => {
+        <div className="flex flex-wrap items-center gap-3 mb-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">Filtrer par statut :</span>
+            <select
+              value={filtreStatut}
+              onChange={(e) => setFiltreStatut(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              <option value="TOUS">Tous</option>
+              <option value="EN_ATTENTE_VALIDATION">En attente de validation</option>
+              <option value="VALIDE">Validés</option>
+              <option value="A_MODIFIER">À modifier</option>
+              <option value="REFUSE">Refusés</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600">Depuis le :</span>
+            <input
+              type="date"
+              value={filtreDate}
+              onChange={(e) => setFiltreDate(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+            {filtreDate && (
+              <button
+                onClick={() => setFiltreDate("")}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        </div>
+
+        {(() => {
+          const bonsFiltres = bons.filter((b) => {
+            // Filtre par statut
+            if (filtreStatut !== "TOUS" && b.statut !== filtreStatut) {
+              return false;
+            }
+            // Filtre par date (depuis une date donnée)
+            if (filtreDate) {
+              const dateFiltre = new Date(filtreDate);
+              dateFiltre.setHours(0, 0, 0, 0);
+              if (b.date_creation) {
+                const dateBon = new Date(b.date_creation);
+                dateBon.setHours(0, 0, 0, 0);
+                if (dateBon < dateFiltre) {
+                  return false;
+                }
+              } else {
+                return false; // Pas de date = exclure
+              }
+            }
+            return true;
+          });
+
+          return bonsFiltres.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Aucun bon de commande pour ce filtre.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="py-2 pr-4">Devis</th>
+                    <th className="py-2 pr-4">Date</th>
+                    <th className="py-2 pr-4">Montant HT</th>
+                    <th className="py-2 pr-4">Montant TTC</th>
+                    <th className="py-2 pr-4 text-center">Statut</th>
+                    <th className="py-2 pr-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bonsFiltres.map((b) => {
                   const pdfUrl = `${API_BASE_URL}/api/boutique/bons-commande/${b.devis_id}/pdf`;
 
                   const montantAPayer = b.has_tva
@@ -206,11 +265,12 @@ export default function BonsCommandePage() {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
