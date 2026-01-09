@@ -7,6 +7,14 @@ import {
   DevisForm,
   DevisFormSubmitPayload,
 } from "@/components/DevisForm";
+import {
+  TopUniqueDevisForm,
+  TopUniqueDevisFormSubmitPayload,
+} from "@/components/TopUniqueDevisForm";
+import {
+  BasDevisForm,
+  BasDevisFormSubmitPayload,
+} from "@/components/BasDevisForm";
 import { Breadcrumb } from "@/components/Breadcrumb";
 
 export default function EditDevisPage() {
@@ -34,22 +42,22 @@ export default function EditDevisPage() {
     load();
   }, [id]);
 
-  async function handleUpdate(payload: DevisFormSubmitPayload) {
+  async function handleUpdateRobe(payload: DevisFormSubmitPayload) {
     try {
-        const body = {
-          dentelle_id: payload.dentelle_id,
-          configuration:
-            payload.configuration ?? (initialDevis as any)?.configuration ?? null,
-          lignes: [
-            {
-              robe_modele_id: null,
-              description: payload.description,
-              quantite: 1,
-              prix_unitaire: payload.coutInterneTotal,
-            },
-          ],
-        };
-
+      const body = {
+        dentelle_id: payload.dentelle_id,
+        configuration:
+          payload.configuration ?? (initialDevis as any)?.configuration ?? null,
+        type: "ROBE",
+        lignes: [
+          {
+            robe_modele_id: null,
+            description: payload.description,
+            quantite: 1,
+            prix_unitaire: payload.coutInterneTotal,
+          },
+        ],
+      };
 
       await apiFetch(`/api/boutique/devis/${id}`, {
         method: "PUT",
@@ -59,6 +67,70 @@ export default function EditDevisPage() {
       router.push("/historique");
     } catch (e: any) {
       alert(e?.message || "Erreur lors de la mise à jour du devis");
+    }
+  }
+
+  async function handleUpdateTopUnique(payload: TopUniqueDevisFormSubmitPayload) {
+    try {
+      const body = {
+        dentelle_id: payload.dentelle_id,
+        configuration: {
+          ...(initialDevis as any)?.configuration,
+          ...payload.configuration,
+        },
+        type: "TOP_UNIQUE",
+        lignes: [
+          {
+            robe_modele_id: null,
+            description: payload.description,
+            quantite: 1,
+            prix_unitaire: payload.coutInterneTotal,
+          },
+        ],
+      };
+
+      await apiFetch(`/api/boutique/devis/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+      router.push("/historique");
+    } catch (e: any) {
+      alert(
+        e?.message || "Erreur lors de la mise à jour du devis top unique"
+      );
+    }
+  }
+
+  async function handleUpdateBas(payload: BasDevisFormSubmitPayload) {
+    try {
+      const body = {
+        dentelle_id: payload.dentelle_id,
+        configuration: {
+          ...(initialDevis as any)?.configuration,
+          ...payload.configuration,
+        },
+        type: "BAS",
+        lignes: [
+          {
+            robe_modele_id: null,
+            description: payload.description,
+            quantite: 1,
+            prix_unitaire: payload.coutInterneTotal,
+          },
+        ],
+      };
+
+      await apiFetch(`/api/boutique/devis/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+      router.push("/historique");
+    } catch (e: any) {
+      alert(
+        e?.message || "Erreur lors de la mise à jour du devis bas"
+      );
     }
   }
 
@@ -100,25 +172,57 @@ export default function EditDevisPage() {
     );
   }
 
+  const devisType =
+    (initialDevis as any)?.type ||
+    (initialDevis as any)?.configuration?.type ||
+    "ROBE";
+
+  const isTopUnique = devisType === "TOP_UNIQUE" || devisType === "BOLERO";
+  const isBas = devisType === "BAS";
+  const isRobe = !isTopUnique && !isBas;
+
+  const typeLabel =
+    isTopUnique
+      ? "top unique"
+      : isBas
+      ? "bas de robe"
+      : "robe";
+
   return (
     <div className="space-y-6">
       <Breadcrumb
         items={[
           { label: "Tableau de bord", href: "/dashboard" },
           { label: "Historique des devis", href: "/historique" },
-          { label: `Modifier le devis #${initialDevis.numero_boutique}` },
+          {
+            label: `Modifier le devis ${typeLabel} #${initialDevis.numero_boutique}`,
+          },
         ]}
       />
 
       <h1 className="text-2xl font-bold">
-        Modifier le devis #{initialDevis.numero_boutique}
+        Modifier le devis {typeLabel} #{initialDevis.numero_boutique}
       </h1>
 
-      <DevisForm
-        mode="edit"
-        initialDevis={initialDevis}
-        onSubmit={handleUpdate}
-      />
+      {isTopUnique ? (
+        <TopUniqueDevisForm
+          mode="edit"
+          initialDevis={initialDevis}
+          onSubmit={handleUpdateTopUnique}
+        />
+      ) : isBas ? (
+        <BasDevisForm
+          mode="edit"
+          initialDevis={initialDevis}
+          onSubmit={handleUpdateBas}
+        />
+      ) : (
+        <DevisForm
+          mode="edit"
+          initialDevis={initialDevis}
+          onSubmit={handleUpdateRobe}
+        />
+      )}
     </div>
   );
 }

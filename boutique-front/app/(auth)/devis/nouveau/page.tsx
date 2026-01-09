@@ -1,48 +1,46 @@
-"use client";
+import Link from "next/link";
 
-import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-import {
-  DevisForm,
-  DevisFormSubmitPayload,
-} from "@/components/DevisForm";
+export default function NouveauDevisChoixPage() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Nouveau devis</h1>
+      <p className="text-sm text-gray-600">
+        Que souhaitez-vous créer ?
+      </p>
 
-export default function NouveauDevisPage() {
-  const router = useRouter();
+      <div className="grid md:grid-cols-3 gap-4">
+        <Link
+          href="/devis/nouveau/robe"
+          className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
+        >
+          <h2 className="font-semibold mb-1">Devis robe complète</h2>
+          <p className="text-sm text-gray-600">
+            Décolleté, découpes, bas, tissus, finitions… configuration
+            complète de la robe.
+          </p>
+        </Link>
 
-  async function handleCreate(formPayload: DevisFormSubmitPayload) {
-    const body = {
-      dentelle_id: formPayload.dentelle_id,
-      configuration: formPayload.configuration ?? null,
-      lignes: [
-        {
-          robe_modele_id: null,
-          description: formPayload.description,
-          quantite: 1,
-          prix_unitaire: formPayload.coutInterneTotal,
-        },
-      ],
-    };
+        <Link
+          href="/devis/nouveau/top-unique"
+          className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
+        >
+          <h2 className="font-semibold mb-1">Devis top unique</h2>
+          <p className="text-sm text-gray-600">
+            Top unique seul : dentelle, manches, finitions devant et dos.
+          </p>
+        </Link>
 
-
-    try {
-      const created = await apiFetch("/api/boutique/devis", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-
-      if (created?.id) {
-        router.push(`/devis/${created.id}/confirmation`);
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (e: any) {
-      alert(
-        e?.message ||
-          "Erreur lors de la création du devis. Veuillez réessayer."
-      );
-    }
-  }
-
-  return <DevisForm mode="create" onSubmit={handleCreate} />;
+        <Link
+          href="/devis/nouveau/bas"
+          className="block border rounded-xl p-4 bg-white shadow hover:shadow-md transition-shadow text-center"
+        >
+          <h2 className="font-semibold mb-1">Devis bas de robe</h2>
+          <p className="text-sm text-gray-600">
+            Bas de robe : finitions bas, tissus bas, finitions supplémentaires et accessoires.
+          </p>
+        </Link>
+      </div>
+    </div>
+  );
 }
+

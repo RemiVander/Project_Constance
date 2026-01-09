@@ -44,6 +44,7 @@ class DevisCreateRequest(BaseModel):
     lignes: List[LigneDevisCreate]
     configuration: dict | None = None
     dentelle_id: int | None = None
+    type: Literal["ROBE", "TOP_UNIQUE", "BAS"] | None = "ROBE"
 
 
 class LigneDevisPublic(BaseModel):
@@ -67,6 +68,7 @@ class DevisPublic(BaseModel):
     id: int
     numero_boutique: int
     statut: str
+    type: str | None = None
     date_creation: Optional[str]
     prix_total: float
     prix_boutique: float

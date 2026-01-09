@@ -137,6 +137,7 @@ class FinitionSupplementaire(Base):
     nom = Column(String, nullable=False)
     prix = Column(Float, default=0.0, nullable=False)
     est_fente = Column(Boolean, default=False, nullable=False)
+    applicable_top_unique = Column(Boolean, default=False, nullable=False)
 
 
 class Accessoire(Base):
@@ -155,6 +156,12 @@ class StatutDevis(str, Enum):
     REFUSE = "REFUSE"
 
 
+class DevisType(str, Enum):
+    ROBE = "ROBE"
+    TOP_UNIQUE = "TOP_UNIQUE"
+    BAS = "BAS"
+
+
 class Devis(Base):
     """Devis créé par les boutiques pour une cliente."""
     __tablename__ = "devis"
@@ -162,6 +169,7 @@ class Devis(Base):
     id = Column(Integer, primary_key=True, index=True)
     boutique_id = Column(Integer, ForeignKey("boutiques.id"), nullable=False)
     numero_boutique = Column(Integer, nullable=False)
+    type = Column(SAEnum(DevisType), default=DevisType.ROBE, nullable=False)
     statut = Column(SAEnum(StatutDevis), default=StatutDevis.EN_COURS, nullable=False)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
     prix_total = Column(Float, default=0.0, nullable=False)

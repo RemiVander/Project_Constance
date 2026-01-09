@@ -17,6 +17,7 @@ const navLinks = [
   { href: "/devis/suivi", label: "Suivi devis" },
   { href: "/bons-commande", label: "Bons de commande" },
   { href: "/profil", label: "Profil" },
+  { href: "/cgv", label: "CGV" },
 ];
 
 export function BoutiqueNavbar() {
@@ -54,7 +55,7 @@ export function BoutiqueNavbar() {
         {/* Gauche : texte seulement */}
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate">
-            Espace boutique Constance Cellier
+            Espace partenaire Constance Cellier
           </div>
           {me && (
             <div className="text-[11px] text-slate-500 truncate">
