@@ -1,0 +1,179 @@
+# ====================================================================
+# FICHIER .env POUR LA PRODUCTION - Constance Cellier
+# ====================================================================
+#
+# INSTRUCTIONS:
+# 1. Copiez ce fichier vers .env : Copy-Item ENV_EXAMPLE.txt .env
+# 2. Remplissez TOUTES les valeurs ci-dessous (surtout celles marquées [OBLIGATOIRE])
+# 3. Le fichier .env est dans .gitignore - il ne sera pas commité (sécurité)
+#
+# ====================================================================
+
+# ====================================================================
+# SECTION 1: SÉCURITÉ [OBLIGATOIRE EN PRODUCTION]
+# ====================================================================
+
+# Clés secrètes - GÉNÉRER DES VALEURS ALEATOIRES FORTES
+# Commande pour générer: python -c "import secrets; print(secrets.token_urlsafe(32))"
+SESSION_SECRET_KEY=GÉNÉRER_UNE_CLÉ_ALÉATOIRE_ICI_32_CARACTÈRES_MINIMUM
+BOUTIQUE_SECRET_KEY=GÉNÉRER_UNE_AUTRE_CLÉ_ALÉATOIRE_ICI_32_CARACTÈRES_MINIMUM
+
+# Détection de l'environnement de production
+# Définir à "production" pour activer automatiquement HTTPS et cookies sécurisés
+ENVIRONMENT=production
+# OU utiliser (une seule des deux suffit):
+# PRODUCTION=true
+
+# Configuration HTTPS/Secure (activées automatiquement si ENVIRONMENT=production)
+# Si vous mettez ENVIRONMENT=production ci-dessus, ces lignes sont optionnelles
+# HTTPS_ONLY=true
+# SECURE_COOKIES=true
+
+# SameSite pour les cookies (optionnel, "strict" par défaut en production)
+# "strict" = plus sécurisé mais peut bloquer certains liens externes
+# "lax" = bon compromis sécurité/compatibilité (recommandé)
+# COOKIE_SAME_SITE=strict
+
+# ====================================================================
+# SECTION 2: URLs DE PRODUCTION [OBLIGATOIRE EN PRODUCTION]
+# ====================================================================
+
+# URL du frontend boutique (Next.js) - DOIT être en HTTPS en production
+FRONT_ORIGIN=https://votre-domaine-front.com
+FRONT_BASE_URL=https://votre-domaine-front.com
+
+# URL de l'API/Backend - DOIT être en HTTPS en production
+BASE_URL=https://votre-domaine-api.com
+
+# Exemples:
+# FRONT_ORIGIN=https://boutique.constance-cellier.fr
+# FRONT_BASE_URL=https://boutique.constance-cellier.fr
+# BASE_URL=https://api.constance-cellier.fr
+
+# ====================================================================
+# SECTION 3: EMAIL [OBLIGATOIRE EN PRODUCTION]
+# ====================================================================
+
+# Email admin pour recevoir les notifications (bons de commande, etc.)
+ADMIN_EMAIL=cellierconstance@gmail.com
+
+# Configuration SMTP - Obligatoire pour l'envoi d'emails
+# 
+# ⭐ RECOMMANDÉ: SENDGRID - Service très fiable
+#    - Gratuit jusqu'à 100 emails/jour
+#    - Excellent délivrabilité, analytics
+#    - Inscription: https://signup.sendgrid.com
+#    - SMTP_HOST=smtp.sendgrid.net
+#    - SMTP_PORT=587
+#    - SMTP_USER=apikey (toujours "apikey" littéralement)
+#    - SMTP_PASSWORD=votre-clé-api-sendgrid (commence par SG.)
+#    - Documentation: Voir CONFIGURATION_SENDGRID.md
+# 
+# AUTRES OPTIONS:
+# 
+# Brevo (ex-Sendinblue):
+#    - Service français, gratuit jusqu'à 300 emails/jour
+#    - Inscription: https://www.brevo.com
+#    - SMTP_HOST=smtp-relay.brevo.com, SMTP_PORT=587
+# 
+# Gmail (Google Workspace):
+#    - Gratuit, limité à 500 emails/jour
+#    - Nécessite un "mot de passe d'application" (pas votre mot de passe normal)
+#    - Activez la validation en 2 étapes puis créez un mot de passe d'application
+#    - SMTP_HOST=smtp.gmail.com, SMTP_PORT=587
+#    - Documentation: https://support.google.com/accounts/answer/185833
+# 
+# Mailgun:
+#    - Gratuit jusqu'à 5000 emails/mois
+#    - Excellent délivrabilité
+#    - Inscription: https://www.mailgun.com
+#    - SMTP_HOST=smtp.mailgun.org, SMTP_PORT=587
+# 
+# Exemple configuration SENDGRID (recommandé):
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=votre-clé-api-sendgrid-commence-par-SG-ici
+SMTP_FROM=noreply@votre-domaine.com
+
+# Optionnel: rediriger tous les emails vers une adresse de debug (pour tests)
+# Utile pendant la mise en place pour éviter d'envoyer aux vrais utilisateurs
+# MAIL_DEBUG_TO=debug@example.com
+
+# ====================================================================
+# SECTION 4: BASE DE DONNÉES [CONFIGURÉ PAR DÉFAUT]
+# ====================================================================
+
+# SQLite par défaut (déjà configuré dans docker-compose.yml)
+# Cette valeur est définie dans docker-compose.yml, normalement pas besoin de la changer ici
+DATABASE_URL=sqlite:////data/robes_demi_mesure.db
+
+# Pour PostgreSQL en production (optionnel, mais recommandé pour plus de robustesse):
+# DATABASE_URL=postgresql://utilisateur:mot_de_passe@serveur:5432/nom_base
+# Exemple:
+# DATABASE_URL=postgresql://constance:password123@db.example.com:5432/constance_db
+
+# ====================================================================
+# SECTION 5: SEED DES DONNÉES INITIALES [IMPORTANT AU PREMIER DÉMARRAGE]
+# ====================================================================
+
+# Mettre à 1 pour créer les admins et les données d'exemple au PREMIER démarrage
+# IMPORTANT: Mettre à 0 après le premier démarrage pour éviter de réinitialiser les données
+SEED_SAMPLE_DATA=1
+
+# Les admins créés par défaut (définis dans create_admin_and_sample.py):
+# - Constance: cellierconstance@gmail.com, password: test123
+# - Rémi: rm.vanderperre@gmail.com, password: test123
+# ATTENTION: Changez ces mots de passe immédiatement après le premier démarrage !
+
+# ====================================================================
+# SECTION 6: TARIFICATION [OPTIONNEL - valeurs par défaut en place]
+# ====================================================================
+
+# Taux de TVA (20% par défaut = 0.20)
+# TVA_RATE=0.20
+
+# Marge boutique (2.5x par défaut)
+# MARGE_BOUTIQUE=2.5
+
+# Marge créatrice (2x par défaut)
+# MARGE_CREATRICE=2
+
+# ====================================================================
+# SECTION 7: TOKENS ET SESSIONS [OPTIONNEL - valeurs par défaut en place]
+# ====================================================================
+
+# Durée de vie des tokens boutique (7 jours par défaut, en secondes)
+# 7 jours = 60 * 60 * 24 * 7 = 604800 secondes
+# BOUTIQUE_TOKEN_MAX_AGE_SECONDS=604800
+
+# ====================================================================
+# RÉCAPITULATIF DES VALEURS OBLIGATOIRES À REMPLIR
+# ====================================================================
+#
+# [OBLIGATOIRE]:
+# 1. SESSION_SECRET_KEY (générer une clé aléatoire)
+# 2. BOUTIQUE_SECRET_KEY (générer une clé aléatoire)
+# 3. ENVIRONMENT=production
+# 4. FRONT_ORIGIN (URL HTTPS du frontend)
+# 5. FRONT_BASE_URL (URL HTTPS du frontend)
+# 6. BASE_URL (URL HTTPS de l'API)
+# 7. ADMIN_EMAIL=cellierconstance@gmail.com
+# 8. SMTP_HOST
+# 9. SMTP_PORT
+# 10. SMTP_USER
+# 11. SMTP_PASSWORD
+# 12. SMTP_FROM
+# 13. SEED_SAMPLE_DATA=1 (au premier démarrage, puis 0)
+#
+# [OPTIONNEL]:
+# - PRODUCTION (si vous ne mettez pas ENVIRONMENT=production)
+# - HTTPS_ONLY (si vous ne mettez pas ENVIRONMENT=production)
+# - SECURE_COOKIES (si vous ne mettez pas ENVIRONMENT=production)
+# - COOKIE_SAME_SITE
+# - DATABASE_URL (si vous gardez SQLite)
+# - MAIL_DEBUG_TO
+# - TVA_RATE, MARGE_BOUTIQUE, MARGE_CREATRICE
+# - BOUTIQUE_TOKEN_MAX_AGE_SECONDS
+#
+# ====================================================================

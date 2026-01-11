@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import get_current_admin
 from ..dependencies import get_db
-from .common import templates
+from .common import templates, template_response
 
 router = APIRouter()
 
@@ -18,10 +18,10 @@ def list_robe_modeles(
     admin: models.User = Depends(get_current_admin),
 ):
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_robe_modeles.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "modeles": modeles,
             "page": "produits",
@@ -93,10 +93,10 @@ def list_tarifs_transformations(
 ):
     tarifs = db.query(models.TransformationTarif).all()
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_tarifs_transformations.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "tarifs": tarifs,
             "modeles": modeles,
@@ -199,10 +199,10 @@ def list_tarifs_tissus(
 ):
     tarifs = db.query(models.TissuTarif).all()
     modeles = db.query(models.RobeModele).order_by(models.RobeModele.nom).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_tarifs_tissus.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "tarifs": tarifs,
             "modeles": modeles,
@@ -304,10 +304,10 @@ def list_finitions_supp(
     admin: models.User = Depends(get_current_admin),
 ):
     finitions = db.query(models.FinitionSupplementaire).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_finitions_supp.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "finitions": finitions,
             "page": "produits",
@@ -378,10 +378,10 @@ def admin_dentelles(
     admin: models.User = Depends(get_current_admin),
 ):
     dentelles = db.query(models.Dentelle).order_by(models.Dentelle.nom).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_dentelles.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "dentelles": dentelles,
             "page": "produits",
@@ -452,10 +452,10 @@ def list_mesures_types(
         .order_by(models.MesureType.ordre, models.MesureType.id)
         .all()
     )
-    return templates.TemplateResponse(
+    return template_response(
         "admin_mesures.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "mesures": mesures,
             "page": "produits",
@@ -474,10 +474,10 @@ def list_accessoires(
     admin: models.User = Depends(get_current_admin),
 ):
     accessoires = db.query(models.Accessoire).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_accessoires.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "accessoires": accessoires,
             "page": "produits",

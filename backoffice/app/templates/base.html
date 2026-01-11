@@ -15,6 +15,14 @@
             <h1 class="text-xl font-bold">Back-end Constance Cellier</h1>
             {% if admin %}
             <p class="text-sm text-gray-500">Connecté : {{ admin.nom }}</p>
+            <form action="/admin/logout" method="post" class="mt-2">
+                {% if csrf_token is defined and csrf_token %}
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% endif %}
+                <button type="submit" class="text-xs text-red-600 hover:text-red-800 underline">
+                    Déconnexion
+                </button>
+            </form>
             {% endif %}
         </div>
         <nav class="p-4 space-y-2 text-sm">
@@ -23,6 +31,9 @@
             </a>
             <a href="/admin/boutiques" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if page=='boutiques' else 'hover:bg-gray-100' }}">
                 Suivi des boutiques
+            </a>
+            <a href="/admin/change-password" class="block px-3 py-2 rounded {{ 'bg-blue-100 text-blue-700' if page=='change-password' else 'hover:bg-gray-100' }}">
+                Changer le mot de passe
             </a>
             <div class="mt-4">
                 <p class="text-xs uppercase text-gray-400 mb-1">Produits</p>

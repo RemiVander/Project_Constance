@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import get_current_admin
 from ..dependencies import get_db
-from .common import templates
+from .common import templates, template_response
 
 router = APIRouter()
 
@@ -106,10 +106,10 @@ def admin_dashboard(
 
     total_bc = bc_q.count() or 0
 
-    return templates.TemplateResponse(
+    return template_response(
         "admin_dashboard.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "total_boutiques": total_boutiques,
             "total_devis": total_devis,

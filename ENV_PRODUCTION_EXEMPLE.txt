@@ -1,0 +1,119 @@
+# ====================================================================
+# EXEMPLE DE FICHIER .env POUR LA PRODUCTION
+# ====================================================================
+# 
+# Ce fichier montre un EXEMPLE COMPLET avec des valeurs réalistes.
+# Copiez-le vers .env et adaptez les valeurs à votre environnement.
+#
+# Commandes pour copier:
+# Windows PowerShell: Copy-Item ENV_PRODUCTION_EXEMPLE.txt .env
+# Linux/Mac: cp ENV_PRODUCTION_EXEMPLE.txt .env
+#
+# ====================================================================
+
+# ====================================================================
+# SÉCURITÉ [OBLIGATOIRE]
+# ====================================================================
+
+# Ces clés ont été générées automatiquement - utilisez-les ou générez-en d'autres
+SESSION_SECRET_KEY=4kKRo1qtH3kgZZqzYrHKfwYGvwQTW2uipQsf6HmBRzc
+BOUTIQUE_SECRET_KEY=47W-pDyrK7CkJ7jAtR10JXgMkgOq0cdM8NZHHaWsIkI
+
+# Environnement de production (active HTTPS et cookies sécurisés)
+ENVIRONMENT=production
+
+# ====================================================================
+# URLs DE PRODUCTION [OBLIGATOIRE - ADAPTEZ À VOS DOMAINES]
+# ====================================================================
+
+# Remplacez par vos vraies URLs HTTPS de production
+FRONT_ORIGIN=https://boutique.constance-cellier.fr
+FRONT_BASE_URL=https://boutique.constance-cellier.fr
+BASE_URL=https://api.constance-cellier.fr
+
+# ====================================================================
+# EMAIL [OBLIGATOIRE]
+# ====================================================================
+
+ADMIN_EMAIL=cellierconstance@gmail.com
+
+# ====================================================================
+# CONFIGURATION SMTP - SENDGRID
+# ====================================================================
+# ✅ Service très fiable, utilisé par de nombreuses entreprises
+# ✅ Gratuit jusqu'à 100 emails/jour (suffisant pour démarrer)
+# ✅ Excellent délivrabilité et analytics
+# ✅ Simple à configurer
+# 
+# INSTRUCTIONS POUR CONFIGURER SENDGRID:
+# 1. Créez un compte gratuit: https://signup.sendgrid.com
+# 2. Confirmez votre email
+# 3. Connectez-vous et allez dans: Settings → API Keys
+# 4. Cliquez sur "Create API Key"
+# 5. Donnez un nom (ex: "Constance Cellier Production")
+# 6. Sélectionnez "Full Access" ou "Restricted Access" avec permissions Mail Send
+# 7. Cliquez sur "Create & View"
+# 8. ⚠️ IMPORTANT: Copiez immédiatement la clé (elle commence par SG.)
+#    Elle ne sera plus visible après! Si perdue, il faudra la recréer.
+# 9. Utilisez cette clé dans SMTP_PASSWORD ci-dessous
+#
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=SG.votre-clé-api-sendgrid-ici
+SMTP_FROM=noreply@constance-cellier.fr
+
+# ====================================================================
+# BASE DE DONNÉES [DÉJÀ CONFIGURÉ PAR DÉFAUT]
+# ====================================================================
+
+# SQLite (défaut - fonctionne bien pour commencer)
+DATABASE_URL=sqlite:////data/robes_demi_mesure.db
+
+# OU PostgreSQL en production (décommenter et adapter si nécessaire):
+# DATABASE_URL=postgresql://constance_user:mot_de_passe_secrèt@db.constance-cellier.fr:5432/constance_db
+
+# ====================================================================
+# SEED DES DONNÉES [IMPORTANT AU PREMIER DÉMARRAGE]
+# ====================================================================
+
+# Mettre à 1 pour créer les admins au premier démarrage, puis 0 après
+SEED_SAMPLE_DATA=1
+
+# ====================================================================
+# NOTES IMPORTANTES:
+# ====================================================================
+#
+# 1. GÉNÉRATION DES CLÉS SECRÈTES:
+#    Si vous voulez générer de nouvelles clés:
+#    python -c "import secrets; print(secrets.token_urlsafe(32))"
+#
+# 2. CONFIGURATION SENDGRID:
+#    ⭐ SendGrid est configuré par défaut - Service très fiable, gratuit, simple
+#       - Inscription gratuite: https://signup.sendgrid.com
+#       - 100 emails/jour gratuits
+#       - Étapes:
+#         1. Créez un compte sur https://signup.sendgrid.com
+#         2. Confirmez votre email
+#         3. Allez dans: Settings → API Keys
+#         4. Cliquez sur "Create API Key"
+#         5. Donnez un nom (ex: "Constance Cellier Production")
+#         6. Sélectionnez "Full Access" ou "Restricted Access" (permissions Mail Send)
+#         7. Copiez la clé générée (⚠️ elle ne s'affichera qu'une seule fois!)
+#            La clé commence par "SG."
+#         8. Collez cette clé dans SMTP_PASSWORD ci-dessus
+#         9. SMTP_USER doit toujours être "apikey" (littéralement)
+#
+# 3. PREMIER DÉMARRAGE:
+#    - Mettez SEED_SAMPLE_DATA=1
+#    - Lancez: docker compose up -d
+#    - Connectez-vous avec les comptes admin créés
+#    - CHANGEZ IMMÉDIATEMENT les mots de passe
+#    - Remettez SEED_SAMPLE_DATA=0
+#
+# 4. ADMINS PAR DÉFAUT (si SEED_SAMPLE_DATA=1):
+#    - Constance: cellierconstance@gmail.com / test123
+#    - Rémi: rm.vanderperre@gmail.com / test123
+#    ⚠️ CHANGEZ CES MOTS DE PASSE IMMÉDIATEMENT !
+#
+# ====================================================================

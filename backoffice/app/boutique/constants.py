@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import os
-
+from ..config import BOUTIQUE_SECRET_KEY, FRONT_BASE_URL
 
 # Front URL used in password reset flows.
-FRONT_BASE_URL: str = os.getenv("FRONT_BASE_URL", "http://localhost:3000")
+# Utilise la configuration centralisée
+# FRONT_BASE_URL est importé depuis config
 
-
-# IMPORTANT: override in production using an env var.
-# Kept backwards-compatible with previous behaviour (same default string).
-SECRET_KEY: str = os.getenv("BOUTIQUE_SECRET_KEY", "CHANGE_ME_SECRET_KEY")
+# Clé secrète pour les tokens boutique (utilise la configuration centralisée)
+SECRET_KEY: str = BOUTIQUE_SECRET_KEY
 
 
 # Token TTL (7 days).

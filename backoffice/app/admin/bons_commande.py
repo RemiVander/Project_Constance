@@ -9,7 +9,7 @@ from .. import models
 from ..auth import get_current_admin
 from ..dependencies import get_db
 from ..utils.mailer import send_admin_bc_notification, send_boutique_bc_notification
-from .common import templates
+from .common import templates, template_response
 
 
 try:
@@ -276,10 +276,10 @@ def admin_bc_timeline(
     except Exception:
         events = []
 
-    return templates.TemplateResponse(
+    return template_response(
         "admin_bon_commande_timeline.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "bon": bon,
             "boutique": boutique,
