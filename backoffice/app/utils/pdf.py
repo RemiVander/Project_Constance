@@ -252,7 +252,7 @@ def generate_pdf_devis_bon(
         )
 
     y = safe_draw(
-        "Conditions générales de vente : www.constancecellier.fr/cgv",
+        "Conditions générales de vente : constancecellier-partenaires.fr/cgv",
         50,
         y,
         font_name="Helvetica",
