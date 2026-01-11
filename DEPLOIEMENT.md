@@ -73,11 +73,11 @@ Ce document liste tous les éléments nécessaires pour déployer l'application 
 
 ### 2. **Domaine (OBLIGATOIRE - À acheter en plus du VPS)**
 
-✅ **Action requise :** Acheter le domaine `constance-cellier.fr` (chez OVH ou ailleurs)
+✅ **Action requise :** Acheter le domaine `constancecellier-partenaires.fr` (chez OVH ou ailleurs)
 
 **Deux choses séparées mais nécessaires :**
 1. **Le VPS (hébergement)** = Où votre site tourne (VPS-1 : 3,82€ HT/mois = 4,58€ TTC/mois)
-2. **Le domaine** = L'adresse du site (constance-cellier.fr) (~10-15€/an)
+2. **Le domaine** = L'adresse du site (constancecellier-partenaires.fr) (~10-15€/an)
 
 **Recommandation :** Acheter les deux chez OVH pour simplifier (même compte, même facture)
 - VPS-1 : 3,82€ HT/mois (4,58€ TTC/mois)
@@ -104,7 +104,7 @@ CNAME api         <DOMAINE_PRINCIPAL>  (ou A direct)
 ```
 
 **À configurer dans le panneau OVH** (ou votre registrar) :
-- Zone DNS du domaine `constance-cellier.fr`
+- Zone DNS du domaine `constancecellier-partenaires.fr`
 
 ### 4. **Choisir l'image système (OS)**
 
@@ -138,16 +138,16 @@ Lors de la configuration du VPS, vous devrez choisir un système d'exploitation 
 # Configuration à créer sur le serveur
 server {
     listen 80;
-    server_name constance-cellier.fr www.constance-cellier.fr;
+    server_name constancecellier-partenaires.fr www.constancecellier-partenaires.fr;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name constance-cellier.fr www.constance-cellier.fr;
+    server_name constancecellier-partenaires.fr www.constancecellier-partenaires.fr;
 
-    ssl_certificate /etc/letsencrypt/live/constance-cellier.fr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/constance-cellier.fr/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/constancecellier-partenaires.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/constancecellier-partenaires.fr/privkey.pem;
 
     # Frontend
     location / {
@@ -190,7 +190,7 @@ server {
 ```bash
 sudo apt update
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d constance-cellier.fr -d www.constance-cellier.fr
+sudo certbot --nginx -d constancecellier-partenaires.fr -d www.constancecellier-partenaires.fr
 ```
 
 **Renouvellement automatique :**
@@ -213,9 +213,9 @@ SESSION_SECRET_KEY=<GENERER_ALEATOIREMENT_32_CARACTERES>
 BOUTIQUE_SECRET_KEY=<GENERER_ALEATOIREMENT_32_CARACTERES>
 
 # URLs (remplacer par votre domaine)
-FRONT_ORIGIN=https://constance-cellier.fr
-FRONT_BASE_URL=https://constance-cellier.fr
-BASE_URL=https://constance-cellier.fr
+FRONT_ORIGIN=https://constancecellier-partenaires.fr
+FRONT_BASE_URL=https://constancecellier-partenaires.fr
+BASE_URL=https://constancecellier-partenaires.fr
 
 # HTTPS/Secure (TRUE en production)
 HTTPS_ONLY=true
@@ -230,7 +230,7 @@ SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
 SMTP_USER=apikey
 SMTP_PASSWORD=<VOTRE_API_KEY_SENDGRID>
-SMTP_FROM=noreply@constance-cellier.fr  # OU cellierconstance@gmail.com si pas encore configuré
+SMTP_FROM=noreply@constancecellier-partenaires.fr  # OU cellierconstance@gmail.com si pas encore configuré
 
 # Email admin
 ADMIN_EMAIL=cellierconstance@gmail.com
@@ -298,10 +298,10 @@ sudo ufw enable
 
 **Une fois le domaine acheté :**
 1. Dans SendGrid : Settings → Sender Authentication → Domain Authentication
-2. Ajouter `constance-cellier.fr`
+2. Ajouter `constancecellier-partenaires.fr`
 3. Configurer les enregistrements DNS (CNAME, TXT) dans OVH
 4. Vérifier le domaine
-5. Utiliser `noreply@constance-cellier.fr` comme `SMTP_FROM`
+5. Utiliser `noreply@constancecellier-partenaires.fr` comme `SMTP_FROM`
 
 **Avantages :**
 - Meilleure délivrabilité (moins de spams)
@@ -355,19 +355,19 @@ sudo ufw enable
 
 7. **Obtenir le certificat SSL**
    ```bash
-   sudo certbot --nginx -d constance-cellier.fr -d www.constance-cellier.fr
+   sudo certbot --nginx -d constancecellier-partenaires.fr -d www.constancecellier-partenaires.fr
    ```
 
 8. **Vérifier que tout fonctionne**
-   - Frontend accessible sur https://constance-cellier.fr
-   - API répond sur https://constance-cellier.fr/api
-   - Admin accessible sur https://constance-cellier.fr/admin
+   - Frontend accessible sur https://constancecellier-partenaires.fr
+   - API répond sur https://constancecellier-partenaires.fr/api
+   - Admin accessible sur https://constancecellier-partenaires.fr/admin
    - Test de création de boutique et réception d'email
 
 ## 📋 Checklist de déploiement
 
 - [ ] Serveur VPS commandé et configuré
-- [ ] Domaine `constance-cellier.fr` acheté chez OVH
+- [ ] Domaine `constancecellier-partenaires.fr` acheté chez OVH
 - [ ] DNS configurés (A, CNAME si nécessaire)
 - [ ] Docker et Docker Compose installés sur le serveur
 - [ ] Projet cloné sur le serveur

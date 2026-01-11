@@ -27,9 +27,9 @@ ENVIRONMENT=production
 # ====================================================================
 
 # Remplacez par vos vraies URLs HTTPS de production
-FRONT_ORIGIN=https://boutique.constance-cellier.fr
-FRONT_BASE_URL=https://boutique.constance-cellier.fr
-BASE_URL=https://api.constance-cellier.fr
+FRONT_ORIGIN=https://constancecellier-partenaires.fr
+FRONT_BASE_URL=https://constancecellier-partenaires.fr
+BASE_URL=https://constancecellier-partenaires.fr
 
 # ====================================================================
 # EMAIL [OBLIGATOIRE]
@@ -61,7 +61,7 @@ SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
 SMTP_USER=apikey
 SMTP_PASSWORD=SG.votre-clé-api-sendgrid-ici
-SMTP_FROM=noreply@constance-cellier.fr
+SMTP_FROM=noreply@constancecellier-partenaires.fr
 
 # ====================================================================
 # BASE DE DONNÉES [DÉJÀ CONFIGURÉ PAR DÉFAUT]
