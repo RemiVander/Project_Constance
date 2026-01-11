@@ -44,7 +44,7 @@ class DevisCreateRequest(BaseModel):
     lignes: List[LigneDevisCreate]
     configuration: dict | None = None
     dentelle_id: int | None = None
-    type: Literal["ROBE", "TOP_UNIQUE", "BAS"] | None = "ROBE"
+    type: Literal["ROBE", "TOP_UNIQUE", "BAS", "BOLERO"] | None = "ROBE"
 
 
 class LigneDevisPublic(BaseModel):

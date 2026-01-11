@@ -18,7 +18,8 @@ from .utils.mailer import (
 )
 
 from .boutique.auth_tokens import create_token_for_boutique, get_current_boutique
-from .boutique.constants import FRONT_BASE_URL, TOKEN_MAX_AGE_SECONDS
+from .boutique.constants import TOKEN_MAX_AGE_SECONDS
+from .config import FRONT_BASE_URL, SECURE_COOKIES, COOKIE_SAME_SITE
 from .boutique.mappers import build_devis_public
 from .boutique.pricing import compute_prix_boutique_et_client
 from .boutique.schemas import (
@@ -71,13 +72,13 @@ def login_boutique(
         raise HTTPException(status_code=403, detail="Boutique suspendue")
 
     token = create_token_for_boutique(boutique)
-
+    
     response.set_cookie(
         key="b2b_token",
         value=token,
         httponly=True,
-        secure=False,  # mettre True en prod (HTTPS)
-        samesite="lax",
+        secure=SECURE_COOKIES,
+        samesite=COOKIE_SAME_SITE,
         max_age=TOKEN_MAX_AGE_SECONDS,
         path="/",
     )

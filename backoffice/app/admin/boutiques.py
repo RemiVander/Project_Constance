@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import date, datetime, timedelta
 import secrets
+import string
 import csv
 import io
 
@@ -13,7 +14,7 @@ from .. import models
 from ..auth import get_current_admin, get_password_hash
 from ..dependencies import get_db
 from ..utils.mailer import send_boutique_password_email
-from .common import templates
+from .common import templates, template_response, template_response
 
 router = APIRouter()
 
@@ -80,10 +81,10 @@ def admin_boutiques(
     admin: models.User = Depends(get_current_admin),
 ):
     boutiques = db.query(models.Boutique).order_by(models.Boutique.nom).all()
-    return templates.TemplateResponse(
+    return template_response(
         "admin_boutiques_list.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "boutiques": boutiques,
             "page": "boutiques",
@@ -98,10 +99,10 @@ def boutique_create_form(
     db: Session = Depends(get_db),
     admin: models.User = Depends(get_current_admin),
 ):
-    return templates.TemplateResponse(
+    return template_response(
         "admin_boutique_create.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "page": "boutiques",
         },
@@ -125,7 +126,9 @@ def boutique_create(
     if existing:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
-    plain_password = secrets.token_urlsafe(8)
+    # Générer un mot de passe plus lisible (évite les caractères ambigus)
+    alphabet = string.ascii_letters + string.digits  # Pas de caractères spéciaux
+    plain_password = ''.join(secrets.choice(alphabet) for _ in range(12))
     boutique = models.Boutique(
         nom=nom,
         email=email,
@@ -221,10 +224,10 @@ def boutique_detail(
         d for d in devis if d.bon_commande and _bc_matches(d.bon_commande)
     ]
 
-    return templates.TemplateResponse(
+    return template_response(
         "admin_boutique_detail.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "boutique": boutique,
             "devis": devis,
@@ -421,10 +424,10 @@ def boutique_edit_form(
     if not boutique:
         return RedirectResponse(url="/admin/boutiques", status_code=302)
 
-    return templates.TemplateResponse(
+    return template_response(
         "admin_boutique_edit.html",
+        request,
         {
-            "request": request,
             "admin": admin,
             "boutique": boutique,
             "page": "boutiques",
@@ -473,7 +476,9 @@ def create_boutique(
         numero_tva=payload.numero_tva,
     )
 
-    temp_password = secrets.token_urlsafe(8)
+    # Générer un mot de passe plus lisible (évite les caractères ambigus)
+    alphabet = string.ascii_letters + string.digits  # Pas de caractères spéciaux
+    temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
     boutique.mot_de_passe_hash = get_password_hash(temp_password)
     boutique.doit_changer_mdp = True
     db.add(boutique)

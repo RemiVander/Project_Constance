@@ -1,7 +1,6 @@
 import os, secrets
 from datetime import datetime, timedelta, timezone
-
-FRONT_BASE_URL = os.getenv("FRONT_BASE_URL", "http://localhost:3000")
+from ..config import FRONT_BASE_URL
 
 def generate_temp_password(length: int = 12) -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*"

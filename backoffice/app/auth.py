@@ -44,9 +44,19 @@ def admin_login_page(request: Request):
     error = request.query_params.get("error")
     error_msg = "Email ou mot de passe incorrect." if error else None
 
+    success = request.query_params.get("success")
+    success_msg = None
+    if success == "password_reset":
+        success_msg = "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter."
+
     return templates.TemplateResponse(
         "admin_login.html",
-        {"request": request, "csrf_token": csrf_token, "error": error_msg},
+        {
+            "request": request,
+            "csrf_token": csrf_token,
+            "error": error_msg,
+            "success": success_msg,
+        },
     )
 
 
@@ -74,10 +84,23 @@ def admin_login(
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
+@router.post("/admin/logout")
+def admin_logout(request: Request):
+    """Déconnexion de l'admin : efface la session."""
+    request.session.clear()
+    return RedirectResponse(url="/admin/login", status_code=302)
+
+
 def get_current_admin(request: Request, db: Session = Depends(get_db)) -> models.User:
+    """Vérifie qu'un admin est connecté, sinon redirige vers /admin/login."""
     admin_id = request.session.get("admin_id")
     if not admin_id:
-        raise HTTPException(status_code=401, detail="Non authentifié")
+        # Utiliser HTTPException avec status 307 pour la redirection
+        raise HTTPException(
+            status_code=307,
+            detail="Redirection vers login",
+            headers={"Location": "/admin/login"},
+        )
 
     admin = (
         db.query(models.User)
@@ -85,7 +108,11 @@ def get_current_admin(request: Request, db: Session = Depends(get_db)) -> models
         .first()
     )
     if not admin:
-        raise HTTPException(status_code=401, detail="Non authentifié")
+        raise HTTPException(
+            status_code=307,
+            detail="Redirection vers login",
+            headers={"Location": "/admin/login"},
+        )
 
     return admin
 

@@ -140,8 +140,7 @@ export default function EditDevisPage() {
 
   async function handleUpdateBolero(payload: BoleroDevisFormSubmitPayload) {
     try {
-      const body = {
-        dentelle_id: payload.dentelle_id,
+      const body: any = {
         configuration: {
           ...(initialDevis as any)?.configuration,
           ...payload.configuration,
@@ -156,6 +155,11 @@ export default function EditDevisPage() {
           },
         ],
       };
+      
+      // N'inclure dentelle_id que s'il est défini (pas null)
+      if (payload.dentelle_id !== null && payload.dentelle_id !== undefined) {
+        body.dentelle_id = payload.dentelle_id;
+      }
 
       await apiFetch(`/api/boutique/devis/${id}`, {
         method: "PUT",

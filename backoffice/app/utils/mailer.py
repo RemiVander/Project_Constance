@@ -9,8 +9,8 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 
+# ADMIN_EMAIL doit être défini via variable d'environnement
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
-
 
 MAIL_DEBUG_TO = os.getenv("MAIL_DEBUG_TO", "")
 
@@ -25,6 +25,13 @@ def _send(to_email: str, subject: str, text: str, html: Optional[str] = None) ->
     msg["From"] = SMTP_FROM
     msg["To"] = final_to
     msg["Subject"] = subject
+    
+    # En-têtes pour améliorer la délivrabilité
+    # Message-ID unique pour chaque email (améliore la délivrabilité)
+    domain = SMTP_FROM.split('@')[1] if '@' in SMTP_FROM else 'constance-cellier.fr'
+    msg["Message-ID"] = f"<{os.urandom(16).hex()}@{domain}>"
+    msg["X-Mailer"] = "Constance Cellier Backend"
+    
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
