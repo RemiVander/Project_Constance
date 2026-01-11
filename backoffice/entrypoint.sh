@@ -35,11 +35,11 @@ if [ -n "$DB_FILE" ]; then
 
   if [ ! -f "$DB_FILE" ]; then
     echo "[entrypoint] DB absente -> initialisation: $DB_FILE"
-    python -m scripts.init_db
+    cd /app && python scripts/init_db.py
 
     if [ "${SEED_SAMPLE_DATA:-0}" = "1" ]; then
       echo "[entrypoint] SEED_SAMPLE_DATA=1 -> création admin + données sample"
-      python -m scripts.create_admin_and_sample
+      cd /app && python scripts/create_admin_and_sample.py
     else
       echo "[entrypoint] Seed ignoré (SEED_SAMPLE_DATA != 1)"
     fi
